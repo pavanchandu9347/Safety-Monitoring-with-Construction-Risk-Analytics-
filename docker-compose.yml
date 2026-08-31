@@ -1,0 +1,37 @@
+version: "3.8"
+
+services:
+  backend:
+    build:
+      context: ./backend
+    container_name: acrip-backend
+    ports:
+      - "8001:8001"
+    environment:
+      - BACKEND_PORT=8001
+    volumes:
+      - ./backend:/app
+    working_dir: /app
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8001
+    networks:
+      - acrip-net
+
+  frontend:
+    image: node:20-alpine
+    container_name: acrip-frontend
+    ports:
+      - "5179:5179"
+    volumes:
+      - ./frontend:/app
+    working_dir: /app
+    command: sh -c "npm install && npm run dev -- --port 5179 --host 0.0.0.0"
+    depends_on:
+      - backend
+    environment:
+      - VITE_API_BASE=/api
+    networks:
+      - acrip-net
+
+networks:
+  acrip-net:
+    driver: bridge

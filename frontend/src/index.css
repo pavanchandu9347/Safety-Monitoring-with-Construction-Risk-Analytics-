@@ -1,0 +1,116 @@
+@import "tailwindcss";
+
+/* ═══════════════════════════════════════════════════════════════
+   SITE RISK OPERATIONS CENTER — INDUSTRIAL CONTROL ROOM THEME
+   Blueprint grid · hazard stripes · monospace instrumentation
+   ═══════════════════════════════════════════════════════════════ */
+
+@theme {
+  /* Industrial palette */
+  --color-panel: #11161d;
+  --color-panel-2: #161c25;
+  --color-panel-3: #1c2530;
+  --color-steel: #2a3542;
+  --color-steel-2: #3a4757;
+  --color-inkslab: #e8e3d8;      /* blueprint paper */
+  --color-hazard: #f5a623;       /* safety amber */
+  --color-hazard-2: #f7b84b;
+  --color-signal: #ff5a3c;       /* alarm red */
+  --color-signal-ok: #36d17e;    /* go-green */
+  --color-signal-info: #4aa8ff;  /* status blue */
+
+  --font-mono-tech: "ui-monospace", "SFMono-Regular", "Menlo", "Consolas", monospace;
+}
+
+html, body, #root {
+  height: 100%;
+}
+
+body {
+  background-color: #0b0f14;
+  color: #d7dde6;
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Blueprint grid backdrop */
+.blueprint-bg {
+  background-color: #0b0f14;
+  background-image:
+    linear-gradient(rgba(74, 168, 255, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(74, 168, 255, 0.05) 1px, transparent 1px),
+    linear-gradient(rgba(74, 168, 255, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(74, 168, 255, 0.03) 1px, transparent 1px);
+  background-size: 80px 80px, 80px 80px, 16px 16px, 16px 16px;
+}
+
+/* Hazard stripe bar */
+.hazard-bar {
+  background-image: repeating-linear-gradient(
+    -45deg,
+    #f5a623 0px, #f5a623 14px,
+    #15181d 14px, #15181d 28px
+  );
+}
+
+/* Technical panel with corner braces */
+.tech-panel {
+  position: relative;
+  background: linear-gradient(180deg, #12161d 0%, #0e1319 100%);
+  border: 1px solid #2a3542;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.03);
+}
+.tech-panel::before,
+.tech-panel::after {
+  content: "";
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  border-color: #4aa8ff;
+  border-style: solid;
+  opacity: 0.55;
+}
+.tech-panel::before {
+  top: -1px; left: -1px;
+  border-width: 2px 0 0 2px;
+}
+.tech-panel::after {
+  bottom: -1px; right: -1px;
+  border-width: 0 2px 2px 0;
+}
+
+/* Bracket label */
+.bracket-label {
+  font-family: var(--font-mono-tech);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  font-size: 10px;
+  color: #7e8c9c;
+}
+
+/* Monospace readout */
+.readout {
+  font-family: var(--font-mono-tech);
+  letter-spacing: 0.05em;
+}
+
+/* LED indicator */
+.led {
+  width: 8px;
+  height: 8px;
+  border-radius: 9999px;
+  display: inline-block;
+}
+.led-on { box-shadow: 0 0 6px currentColor; }
+
+/* Status color helpers reused via inline classes */
+.text-signal { color: #ff5a3c; }
+.text-hazard { color: #f5a623; }
+.text-ok { color: #36d17e; }
+.text-info { color: #4aa8ff; }
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: #0b0f14; }
+::-webkit-scrollbar-thumb { background: #2a3542; border-radius: 0; border: 2px solid #0b0f14; }
+::-webkit-scrollbar-thumb:hover { background: #3a4757; }
