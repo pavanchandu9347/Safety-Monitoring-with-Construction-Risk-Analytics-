@@ -45,7 +45,7 @@ function StatChip({ icon: Icon, label, value, accent, sub }) {
       <div className="min-w-0">
         <div className="readout text-2xl font-black text-white tabular-nums leading-none">{value}</div>
         <div className="readout text-[9px] text-slate-500 tracking-widest mt-1 uppercase truncate">{label}</div>
-        {sub && <div className="readout text-[9px] text-slate-600 mt-0.5">{sub}</div>}
+        {sub && <div className="readout text-[9px] text-slate-400 mt-0.5">{sub}</div>}
       </div>
     </div>
   )
@@ -119,7 +119,7 @@ export default function Safety() {
 
   const runAnalysis = async () => {
     setRunning(true)
-    try { await api.getSafetyAnalysis(siteId); await load() } finally { setRunning(false) }
+    try { await api.analyzeVideo(siteId); await load() } finally { setRunning(false) }
   }
 
   const selectImage = (e) => {
@@ -177,7 +177,7 @@ export default function Safety() {
             <HardHat className="text-hazard" size={18} />
             <h1 className="text-white font-black tracking-[0.15em] text-lg">SAFETY INTELLIGENCE</h1>
           </div>
-          <div className="readout text-[10px] text-slate-500 tracking-widest mt-0.5">WORKER PROTECTION · PPE COMPLIANCE · IMAGE ANALYSIS · M2</div>
+          <div className="readout text-[10px] text-slate-500 tracking-widest mt-0.5">WORKER PROTECTION · PPE COMPLIANCE · IMAGE ANALYSIS</div>
         </div>
         <button onClick={runAnalysis} disabled={running}
           className="flex items-center gap-2 bg-hazard hover:bg-hazard-2 disabled:opacity-50 text-black readout text-[11px] font-bold tracking-wider px-3 py-2 transition">
@@ -240,7 +240,7 @@ export default function Safety() {
       {(analysis || analysisError || img) && (
         <div className="tech-panel p-4">
           <div className="flex items-center justify-between mb-3">
-            <span className="bracket-label flex items-center gap-1.5"><ImageIcon size={12} /> IMAGE ANALYSIS <span className="text-slate-600">· REAL YOLO INFERENCE</span></span>
+            <span className="bracket-label flex items-center gap-1.5"><ImageIcon size={12} /> IMAGE ANALYSIS <span className="text-slate-400">· REAL YOLO INFERENCE</span></span>
             <button onClick={() => { setImg(null); setAnalysis(null); setAnalysisError(null); setShowRaw(false) }}
               className="readout text-[10px] text-slate-500 hover:text-white flex items-center gap-1"><X size={11} /> CLEAR</button>
           </div>

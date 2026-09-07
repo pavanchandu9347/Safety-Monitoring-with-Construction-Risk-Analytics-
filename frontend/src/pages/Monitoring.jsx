@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { api } from '../services/api'
 import { useSite } from '../hooks/useDashboard'
 import { formatTime } from '../utils/risk'
-import { Radio, Play, Activity, Wind, Thermometer, Wrench, Rss, ShieldAlert } from 'lucide-react'
+import { Radio, Play, Activity, Wind, Thermometer, Wrench, Rss, ShieldAlert, Loader2 } from 'lucide-react'
 import { StatChip, Section, ActionBar } from '../components/progressive'
 
 export default function Monitoring() {
@@ -10,51 +10,46 @@ export default function Monitoring() {
   const [events, setEvents] = useState([])
   const [equipment, setEquipment] = useState([])
   const [environmental, setEnvironmental] = useState(null)
-  const [simulating, setSimulating] = useState(false)
+  const [latest, setLatest] = useState(null)
+  const [running, setRunning] = useState(false)
   const [detail, setDetail] = useState(null)
   const feedRef = useRef(null)
 
   const load = async () => {
     try {
-      const [evRes, eqRes, envRes] = await Promise.all([
+      const [evRes, eqRes, envRes, latestRes] = await Promise.all([
         api.getMonitoring(siteId),
         api.getEquipmentDemo(),
         api.getEnvironmentalDemo('excavation'),
+        api.getLatestVideoAnalysis(siteId),
       ])
-      setEvents((prev) => (prev.length ? prev : evRes.data))
-      setEquipment(eqRes.data)
-      setEnvironmental(envRes.data)
+      setEvents(evRes.data || [])
+      setEquipment(eqRes.data || [])
+      setEnvironmental(envRes.data || null)
+      if (latestRes.data?.status === 'completed') setLatest(latestRes.data)
     } catch {}
   }
   useEffect(() => { load() }, [siteId])
   useEffect(() => { if (feedRef.current) feedRef.current.scrollTop = feedRef.current.scrollHeight }, [events])
 
-  const runSimulate = async () => {
-    setSimulating(true)
-    try {
-      const res = await api.simulateMonitoring(siteId)
-      const env0 = Object.values(res.data.environmental_data || {})[0]
-      const active = res.data.equipment_data.filter((e) => e.status === 'active').length
-      const now = new Date().toISOString()
-      setEvents((prev) => [{
-        id: 'evt_' + Date.now(), timestamp: now,
-        event_type: 'simulated_monitoring',
-        description: `SENSOR PACK · ${env0?.weather || '—'} / VIS ${env0?.visibility || '—'} · ${active} ACTIVE UNITS`,
-        source: 'demo_simulation',
-      }, ...prev])
-    } finally { setSimulating(false) }
+  const runAnalysis = async () => {
+    setRunning(true)
+    try { await api.analyzeVideo(siteId); await load() } finally { setRunning(false) }
   }
 
-  const envCells = environmental ? [
-    ['TEMP', `${environmental.temperature_celsius}°C`],
-    ['HUMID', `${environmental.humidity_percent}%`],
-    ['WIND', `${environmental.wind_speed_kmh} KM/H`],
-    ['WEATHER', environmental.weather.toUpperCase()],
-    ['VISIBILITY', environmental.visibility.toUpperCase()],
-    ['GROUND', (environmental.ground_condition || '').toUpperCase()],
-    ['LIGHTING', (environmental.lighting_condition || '').toUpperCase()],
-    ['SCNR.', (environmental.scenario || '').toUpperCase()],
-  ] : []
+  const envCells = latest?.video ? {
+    'LIGHTING': latest.video.lighting_condition,
+    'FRAMES': `${latest.video.frames_analyzed ?? 0} @ ${latest.video.frame_interval ?? 0}f`,
+    'WORKERS': `${latest.worker_count ?? 0} DETECTED`,
+    'VEHICLES': `${latest.vehicle_count ?? 0} DETECTED`,
+  } : (environmental ? {
+    'LIGHTING': environmental.lighting_condition,
+    'WEATHER': environmental.weather,
+    'VISIBILITY': environmental.visibility,
+    'GROUND': environmental.ground_condition,
+  } : {})
+
+  const envList = Object.entries(envCells)
 
   return (
     <div className="p-4 space-y-4 max-w-[1600px] mx-auto">
@@ -64,11 +59,11 @@ export default function Monitoring() {
             <Radio className="text-info" size={18} />
             <h1 className="text-white font-black tracking-[0.15em] text-lg">SENSOR MONITORING FEED</h1>
           </div>
-          <div className="readout text-[10px] text-slate-500 tracking-widest mt-0.5">ENVIRONMENTAL + EQUIPMENT TELEMETRY · SIMULATED SOURCE</div>
+          <div className="readout text-[10px] text-slate-500 tracking-widest mt-0.5">VIDEO-DERIVED ENVIRONMENTAL + EQUIPMENT TELEMETRY</div>
         </div>
-        <button onClick={runSimulate} disabled={simulating}
-          className="flex items-center gap-2 bg-steel-2 hover:bg-steel text-white readout text-[11px] font-bold tracking-wider px-3 py-2 transition disabled:opacity-50">
-          {simulating ? <><Activity size={13} /> INGESTING...</> : <><Play size={13} /> SIMULATE NEXT TICK</>}
+        <button onClick={runAnalysis} disabled={running}
+          className="flex items-center gap-2 bg-hazard hover:bg-hazard-2 text-black readout text-[11px] font-bold tracking-wider px-3 py-2 transition disabled:opacity-50">
+          {running ? <><Loader2 size={13} className="animate-spin" /> ANALYZING VIDEO...</> : <><Play size={13} /> ANALYZE SITE VIDEO</>}
         </button>
       </div>
 
@@ -76,13 +71,11 @@ export default function Monitoring() {
 
       {/* Overview stat chips */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <StatChip icon={Rss} label="Events Buffered" value={events.length} accent="#4aa8ff" />
+        <StatChip icon={Rss} label="Events Streamed" value={events.length} accent="#4aa8ff" />
         <StatChip icon={Wrench} label="Equipment Assets" value={equipment.length} accent="#f5a623"
           sub={`${equipment.filter((e) => e.status === 'active').length} active`} />
-        <StatChip icon={Thermometer} label="Ambient" value={environmental ? `${environmental.temperature_celsius}°C` : '—'}
-          accent="#36d17e" />
-        <StatChip icon={Wind} label="Wind" value={environmental ? `${environmental.wind_speed_kmh} km/h` : '—'}
-          accent="#b794ff" />
+        <StatChip icon={Thermometer} label="Workers" value={latest?.worker_count ?? '—'} accent="#36d17e" sub="yolo persons" />
+        <StatChip icon={Wind} label="Vehicles" value={latest?.vehicle_count ?? '—'} accent="#b794ff" />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
@@ -90,15 +83,15 @@ export default function Monitoring() {
         <div className="lg:col-span-2 tech-panel p-4">
           <div className="bracket-label mb-3 flex items-center justify-between">
             <span>LIVE DATA CONSOLE</span>
-            <span className="flex items-center gap-1.5 text-ok"><span className="led led-on bg-ok" /> STREAMING</span>
+            <span className="flex items-center gap-1.5 text-ok"><span className="led led-on bg-ok" /> LINKED TO ANALYSIS</span>
           </div>
           <div ref={feedRef} className="max-h-[540px] overflow-y-auto font-mono space-y-0.5 bg-[#080b0f] border border-steel">
             {events.length === 0 && (
-              <div className="p-6 text-slate-500 text-center text-sm">NO EVENTS IN BUFFER — CLICK "SIMULATE NEXT TICK" TO STREAM DATA</div>
+              <div className="p-6 text-slate-500 text-center text-sm">NO EVENTS IN BUFFER — RUN "ANALYZE SITE VIDEO" TO EMIT SENSOR EVENTS</div>
             )}
             {events.map((e, i) => (
               <div key={e.id || i} className="flex items-start gap-3 px-3 py-1.5 border-b border-steel/30 hover:bg-[#0e1319]">
-                <span className="text-slate-600 text-[11px] whitespace-nowrap select-none">{formatTime(e.timestamp)}</span>
+                <span className="text-slate-400 text-[11px] whitespace-nowrap select-none">{formatTime(e.timestamp)}</span>
                 <span className="text-ok text-[11px] mt-px">›</span>
                 <div className="text-[11px]">
                   <span className="text-info font-semibold uppercase tracking-wide mr-2">{e.event_type.replace(/_/g, ' ')}</span>
@@ -125,22 +118,23 @@ export default function Monitoring() {
         {/* Detail telemetry (progressive disclosure) */}
         <div className="space-y-3">
           {detail === 'env' && (
-            <Section title="ENVIRONMENTAL MONITOR" badge="SIM" onClose={() => setDetail(null)}>
-              {environmental ? (
+            <Section title="ENVIRONMENTAL MONITOR" badge="VIDEO" onClose={() => setDetail(null)}>
+              {envList.length ? (
                 <div className="grid grid-cols-2 gap-2">
-                  {envCells.map(([k, v]) => (
+                  {envList.map(([k, v]) => (
                     <div key={k} className="bg-[#0a0e13] border border-steel px-2.5 py-2">
                       <div className="readout text-[8px] text-slate-500 tracking-widest">{k}</div>
-                      <div className="readout text-[13px] text-slate-100 font-semibold truncate">{v}</div>
+                      <div className="readout text-[13px] text-slate-100 font-semibold truncate">{v || '—'}</div>
                     </div>
                   ))}
                 </div>
-              ) : <div className="readout text-xs text-slate-500">NO DATA</div>}
+              ) : <div className="readout text-xs text-slate-500">NO DATA — ANALYZE A VIDEO FIRST</div>}
             </Section>
           )}
 
           {detail === 'equipment' && (
-            <Section title="EQUIPMENT STATE" badge="SIM" onClose={() => setDetail(null)}>
+            <Section title="EQUIPMENT STATE" badge="VIDEO" onClose={() => setDetail(null)}>
+              {equipment.length === 0 && <div className="readout text-xs text-slate-500">NO EQUIPMENT — ANALYZE A VIDEO FIRST</div>}
               {equipment.map((eq) => (
                 <div key={eq.name} className="flex items-center justify-between py-1.5 border-b border-steel/50 last:border-0">
                   <div className="readout">
@@ -160,16 +154,16 @@ export default function Monitoring() {
             <Section title="FEED SUMMARY" onClose={() => setDetail(null)}>
               <div className="space-y-1.5">
                 <div className="flex justify-between readout text-[11px] text-slate-300"><span>Events Streamed</span><span className="text-white">{events.length}</span></div>
-                <div className="flex justify-between readout text-[11px] text-slate-300"><span>Active Equipment</span><span className="text-ok">{equipment.filter((e) => e.status === 'active').length}</span></div>
-                <div className="flex justify-between readout text-[11px] text-slate-300"><span>Maintenance</span><span className="text-hazard">{equipment.filter((e) => e.status === 'maintenance').length}</span></div>
-                <div className="flex justify-between readout text-[11px] text-slate-300"><span>Weather</span><span className="text-white capitalize">{(environmental?.weather || '—').replace(/_/g, ' ')}</span></div>
+                <div className="flex justify-between readout text-[11px] text-slate-300"><span>Equipment Assets</span><span className="text-ok">{equipment.length}</span></div>
+                <div className="flex justify-between readout text-[11px] text-slate-300"><span>Active Units</span><span className="text-hazard">{equipment.filter((e) => e.status === 'active').length}</span></div>
+                <div className="flex justify-between readout text-[11px] text-slate-300"><span>Lighting</span><span className="text-white uppercase">{latest?.video?.lighting_condition || '—'}</span></div>
               </div>
             </Section>
           )}
 
           {!detail && (
             <div className="tech-panel p-4 text-center">
-              <Activity className="mx-auto mb-2 text-slate-600" size={26} />
+              <Activity className="mx-auto mb-2 text-slate-400" size={26} />
               <p className="readout text-[10px] text-slate-500 tracking-widest">SELECT A TELEMETRY VIEW ABOVE FOR DETAILED READOUT</p>
             </div>
           )}

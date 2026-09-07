@@ -41,6 +41,26 @@ export const api = {
   updateViolationStatus: (violationId, status) =>
     API.patch(`/safety/violations/${violationId}/status`, null, { params: { status } }),
 
+  // ── Unified video-analysis pipeline (single primary input) ──────────
+  listVideoSources: (siteId) => API.get('/video/source', { params: { site_id: siteId } }),
+  analyzeVideo: (siteId, { videoPath = '', file = null, conf = 0 } = {}) => {
+    if (file) {
+      const formData = new FormData()
+      formData.append('site_id', siteId)
+      formData.append('file', file)
+      if (conf > 0) formData.append('conf', String(conf))
+      return API.post('/video/analyze', formData, { timeout: 300000 })
+    }
+    return API.post('/video/analyze', null, {
+      params: { site_id: siteId, video_path: videoPath, conf },
+      timeout: 300000,
+    })
+  },
+  getVideoAnalysis: (analysisId) => API.get(`/video/analysis/${analysisId}`),
+  getLatestVideoAnalysis: (siteId) => API.get(`/sites/${siteId}/video/analysis/latest`),
+  listSiteAnalyses: (siteId) => API.get(`/sites/${siteId}/video/analysis`),
+  getLatestRiskAnalysis: (siteId) => API.get(`/sites/${siteId}/risk/latest`),
+
   // ── Live video-analysis pipeline ────────────────────────────────────
   getLiveStatus: (siteId) => API.get(`/sites/${siteId}/live/status`),
   startLive: (siteId, body = {}) => API.post(`/sites/${siteId}/live/start`, body),

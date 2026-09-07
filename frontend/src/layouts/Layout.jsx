@@ -61,18 +61,18 @@ export default function Layout() {
         {/* Center readouts */}
         <div className="hidden md:flex flex-1 items-center gap-6 px-6 readout text-[11px] text-slate-400">
           <div className="flex items-center gap-2">
-            <span className="text-slate-600 tracking-widest">SITE</span>
+            <span className="text-slate-500 tracking-widest">SITE</span>
             <span className="text-slate-200 font-semibold">RV-TOWER-A1</span>
           </div>
           <div className="flex items-center gap-2">
             <span className="led led-on" style={{ background: level.color, color: level.color }} />
-            <span className="text-slate-600 tracking-widest">RISK</span>
+            <span className="text-slate-500 tracking-widest">RISK</span>
             <span style={{ color: level.color }} className="font-bold">{level.label}</span>
             <span className="text-slate-400">{risk?.overall_score?.toFixed(1)}</span>
           </div>
           <div className="flex items-center gap-2">
-            <Gauge className="text-slate-600" size={13} />
-            <span className="text-slate-600 tracking-widest">MODE</span>
+            <Gauge className="text-slate-500" size={13} />
+            <span className="text-slate-500 tracking-widest">MODE</span>
             <span className="text-info">DEMO / SIM</span>
           </div>
         </div>
@@ -111,7 +111,7 @@ export default function Layout() {
                         : 'border-steel-2 text-slate-400 hover:text-white hover:bg-[#1b2431]'
                     }`
                   }>
-                  <span className="text-slate-600 group-hover:text-slate-500 text-[10px]">{code}</span>
+                  <span className="text-slate-500 group-hover:text-slate-500 text-[10px]">{code}</span>
                   <Icon className={active ? 'text-hazard' : 'text-slate-500'} size={15} />
                   <span>{label}</span>
                 </NavLink>
@@ -125,7 +125,7 @@ export default function Layout() {
               <span className="led led-on bg-ok" /> Live conduit:
               <span className="text-ok">ACTIVE</span>
             </div>
-            <div className="mt-1 text-[10px] text-slate-600 readout">SIMULATED SOURCE — NOT LIVE CAM</div>
+            <div className="mt-1 text-[10px] text-slate-500 readout">ONE INPUT VIDEO · SHARED ANALYSIS PIPELINE</div>
           </div>
         </aside>
 
@@ -138,11 +138,11 @@ export default function Layout() {
       {/* ── bottom status bar ── */}
       <footer className="h-7 border-t border-steel bg-[#0e1218] flex items-center px-4 readout text-[10px] text-slate-500 gap-6">
         <span className="text-ok">● SYS ONLINE</span>
-        <span className="text-slate-600">|</span>
+        <span className="text-slate-500">|</span>
         <span>MILESTONE 2 · SITE RISK + SAFETY AGENTS</span>
-        <span className="text-slate-600">|</span>
+        <span className="text-slate-500">|</span>
         <span>PPE ENGINE: READY</span>
-        <span className="ml-auto text-slate-600">ACRIP-00 / RT 23:59:59</span>
+        <span className="ml-auto text-slate-500">ACRIP-00 / RT 23:59:59</span>
       </footer>
     </div>
   )

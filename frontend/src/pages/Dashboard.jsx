@@ -1,12 +1,12 @@
 import { useDashboard } from '../hooks/useDashboard'
 import { formatTime } from '../utils/risk'
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { api } from '../services/api'
 import { useSite } from '../hooks/useDashboard'
 import {
   TrendingUp, TrendingDown, Minus, ShieldAlert, Droplets, Wrench, MapPin,
   Activity, Crosshair, Gauge, Radio, RefreshCw, Wrench as WrenchIcon, Sparkles, ListChecks,
-  Video, Play, Square, RadioTower
+  Video, Play, Square, RadioTower, Upload, Loader2, Clapperboard
 } from 'lucide-react'
 import { StatChip, Section, ActionBar } from '../components/progressive'
 
@@ -36,7 +36,7 @@ function GaugeSegment({ value, label, color }) {
       </div>
       <div className="flex items-end gap-2">
         <span className="readout text-3xl font-bold text-white tabular-nums">{v.toFixed(0)}</span>
-        <span className="readout text-slate-600 text-xs mb-1">/100</span>
+        <span className="readout text-slate-500 text-xs mb-1">/100</span>
       </div>
       <div className="mt-2 h-1.5 bg-[#0a0e13] border border-steel rounded-full overflow-hidden">
         <div className="h-full" style={{ width: `${v}%`, background: color, boxShadow: `0 0 8px ${color}` }} />
@@ -121,10 +121,35 @@ export default function Dashboard() {
   const [generating, setGenerating] = useState(false)
   const [detail, setDetail] = useState(null)
   const [showVideo, setShowVideo] = useState(false)
+  const [latest, setLatest] = useState(null)
+  const [sources, setSources] = useState(null)
+  const [videoBusy, setVideoBusy] = useState(false)
+  const [videoErr, setVideoErr] = useState(null)
+  const videoFileRef = useRef(null)
   const liveMeta = LIVE_META[live?.status] || LIVE_META.STOPPED
   const isLiveRunning = live?.status === 'LIVE' || live?.status === 'STARTING'
   const apiLiveVideoUrl = api.liveVideoUrl(siteId)
   const trend = liveTrend.length ? liveTrend : data?.risk_trend
+
+  const loadVideoMeta = async () => {
+    try {
+      const [s, l] = await Promise.all([api.listVideoSources(siteId), api.getLatestVideoAnalysis(siteId)])
+      setSources(s.data)
+      if (l.data?.status === 'completed') setLatest(l.data)
+    } catch { /* backend offline — non-fatal */ }
+  }
+  useEffect(() => { loadVideoMeta() }, [siteId])
+  useEffect(() => { if (videoBusy) return; loadVideoMeta() }, [data?.timestamp])
+
+  const analyzeVideo = async (file = null) => {
+    setVideoBusy(true); setVideoErr(null)
+    try {
+      await api.analyzeVideo(siteId, { file })
+      await Promise.all([reload(), loadVideoMeta()])
+    } catch (e) {
+      setVideoErr(e.response?.data?.detail || e.message || 'Video analysis failed')
+    } finally { setVideoBusy(false) }
+  }
 
   if (error && !data) {
     return (
@@ -146,7 +171,7 @@ export default function Dashboard() {
 
   const handleGenerate = async () => {
     setGenerating(true)
-    try { await api.generateDemo(siteId); await reload() } finally { setGenerating(false) }
+    try { await api.generateDemo(siteId); await Promise.all([reload(), loadVideoMeta()]) } finally { setGenerating(false) }
   }
 
   return (
@@ -158,15 +183,39 @@ export default function Dashboard() {
             <Crosshair className="text-hazard" size={18} />
             <h1 className="text-white font-black tracking-[0.15em] text-lg">RIVERSIDE TOWER — SITE A1</h1>
           </div>
-          <div className="readout text-[10px] text-slate-500 tracking-widest mt-0.5">CONSTRUCTION RISK OPERATIONS CENTER · MILESTONE 1</div>
+          <div className="readout text-[10px] text-slate-500 tracking-widest mt-0.5">CONSTRUCTION RISK OPERATIONS CENTER · ONE VIDEO · ONE ANALYSIS</div>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={handleGenerate} disabled={generating}
-            className="flex items-center gap-2 bg-hazard hover:bg-hazard-2 text-black readout text-[11px] font-bold tracking-wider px-3 py-2 transition">
-            {generating ? '│ . . . ' : ''}
-            {generating ? 'RE-RUNNING ANALYSIS' : <><RefreshCw size={13} /> RUN RISK ANALYSIS</>}
+          <button onClick={() => videoFileRef.current?.click()} disabled={videoBusy}
+            className="flex items-center gap-2 bg-steel hover:bg-steel-2 disabled:opacity-50 text-white border border-steel-2 hover:border-steel-3 readout text-[11px] font-bold tracking-wider px-3 py-2 transition">
+            <Upload size={13} /> LOAD VIDEO
+          </button>
+          <input ref={videoFileRef} type="file" accept="video/*,.mp4,.mov,.avi,.mkv,.webm" className="hidden"
+            onChange={(e) => { const f = e.target.files?.[0]; if (f) analyzeVideo(f); e.target.value = '' }} />
+          <button onClick={() => analyzeVideo()} disabled={videoBusy}
+            className="flex items-center gap-2 bg-hazard hover:bg-hazard-2 text-black readout text-[11px] font-bold tracking-wider px-3 py-2 transition disabled:opacity-60">
+            {videoBusy ? <><Loader2 className="animate-spin" size={13} /> SAMPLING › YOLO › AGENTS</> : <><RefreshCw size={13} /> ANALYZE SITE VIDEO</>}
           </button>
         </div>
+      </div>
+
+      {/* ── Input video strip (single primary source) ── */}
+      <div className="tech-panel p-3">
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <div className="flex items-center gap-2 readout text-[11px]">
+            <Clapperboard className="text-info" size={14} />
+            <span className="text-slate-500 tracking-widest">INPUT VIDEO</span>
+            <span className="text-slate-100 font-semibold truncate">{latest?.video?.filename || sources?.default?.name || '—'}</span>
+            {latest?.status === 'completed' && (
+              <span className="text-ok text-[10px]">· {latest.worker_count ?? 0} WRK · {latest.vehicle_count ?? 0} VEH · {latest.equipment?.length ?? 0} EQ · {latest.video?.lighting_condition || '—'} LIGHT</span>
+            )}
+          </div>
+          <div className="flex items-center gap-3 readout text-[10px] text-slate-500">
+            {latest?.analysis_id && <span>ANALYSIS {latest.analysis_id.slice(0, 8)} · {formatTime(latest.timestamp)}</span>}
+            {!latest && <span>NO ANALYSIS YET — PRESS "ANALYZE SITE VIDEO"</span>}
+          </div>
+        </div>
+        {videoErr && <div className="readout text-[10px] text-signal mt-2">⚠ {videoErr}</div>}
       </div>
 
       {/* ── Live video-analysis panel (real YOLO detection) ── */}
@@ -346,7 +395,7 @@ export default function Dashboard() {
       />
 
       {detail === 'equipment' && (
-        <Section title="EQUIPMENT TELEMETRY" badge={`${data.equipment?.length || 0} ASSETS · SIMULATED`} onClose={() => setDetail(null)}>
+        <Section title="EQUIPMENT TELEMETRY" badge={`${data.equipment?.length || 0} ASSETS`} onClose={() => setDetail(null)}>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-[420px] overflow-y-auto">
             {data.equipment?.map((eq) => (
               <div key={eq.id} className="flex items-center justify-between bg-[#0a0e13] border border-steel px-3 py-2">

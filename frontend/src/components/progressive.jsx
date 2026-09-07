@@ -11,7 +11,7 @@ export function StatChip({ icon: Icon, label, value, accent, sub }) {
       <div className="min-w-0">
         <div className="readout text-2xl font-black text-white tabular-nums leading-none">{value}</div>
         <div className="readout text-[9px] text-slate-500 tracking-widest mt-1 uppercase truncate">{label}</div>
-        {sub && <div className="readout text-[9px] text-slate-600 mt-0.5">{sub}</div>}
+        {sub && <div className="readout text-[9px] text-slate-400 mt-0.5">{sub}</div>}
       </div>
     </div>
   )

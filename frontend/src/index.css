@@ -85,7 +85,7 @@ body {
   letter-spacing: 0.18em;
   text-transform: uppercase;
   font-size: 10px;
-  color: #7e8c9c;
+  color: #94a5b8;
 }
 
 /* Monospace readout */
@@ -108,6 +108,19 @@ body {
 .text-hazard { color: #f5a623; }
 .text-ok { color: #36d17e; }
 .text-info { color: #4aa8ff; }
+
+/* ── Dark-theme contrast pass ──────────────────────────────────────
+   Bump the two most-used dim slate shades into readable range against
+   the #0b0f14 / #0e1319 panel backgrounds (9–11px mono readouts).
+   Plain rules beat the Tailwind utilities layer, so these apply
+   regardless of the utility class order. */
+.text-slate-500 { color: #7b8ca0; }
+.text-slate-400 { color: #94a5b8; }
+
+/* Bracket labels: raise base tint for tiny uppercase readouts */
+.bracket-label {
+  color: #94a5b8;
+}
 
 /* Scrollbar */
 ::-webkit-scrollbar { width: 10px; height: 10px; }
