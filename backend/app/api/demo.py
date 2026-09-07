@@ -14,6 +14,7 @@ from app.models.models import (
 )
 from app.services.simulated_data import DemoDataGenerator, EnvironmentalSimulator, EquipmentSimulator
 from app.agents.site_risk_agent.agent import SiteRiskAgent
+from app.services.video_analysis import get_video_report, attach_worker_counts
 
 router = APIRouter()
 
@@ -53,8 +54,12 @@ def generate_demo_analysis(site_id: str = "site_riverside_main", db: Session = D
 
     zones = existing_zones
 
+    # Real detections from the SAME configured source video, not constants.
+    video_report = get_video_report(site_id=site_id)
+
     if not db.query(Equipment).filter(Equipment.site_id == site_id).first():
         eq_data = equip_sim.get_equipment_status(dt=now)
+        eq_data = attach_worker_counts(eq_data, video_report.get("worker_count", 0))
         zone_map = {"zone_a": "zone_a", "zone_b": "zone_b", "zone_c": "zone_c"}
         for eq_info in eq_data:
             eq_zone = "zone_a" if "Excavator" in eq_info["name"] or "Dump" in eq_info["name"] or "Bulldozer" in eq_info["name"] else "zone_c"
@@ -79,13 +84,15 @@ def generate_demo_analysis(site_id: str = "site_riverside_main", db: Session = D
         )
 
     equipment_data = equip_sim.get_equipment_status(dt=now)
+    # Equipment-proximity risk follows the real video worker count.
+    equipment_data = attach_worker_counts(
+        equipment_data, video_report.get("worker_count", 0)
+    )
+    detected_objects = video_report.get("detected_objects", [])
 
     event_data = {
-        "detected_objects": [
-            {"label": "person", "confidence": 0.88, "count": 3, "class_id": 0},
-            {"label": "excavator", "confidence": 0.91, "count": 1, "class_id": 7},
-            {"label": "truck", "confidence": 0.85, "count": 1, "class_id": 7},
-        ],
+        "detected_objects": detected_objects,
+        "worker_count": video_report.get("worker_count", 0),
         "equipment_activity": {
             e["name"]: {"status": e["status"], "activity": e["activity"]}
             for e in equipment_data

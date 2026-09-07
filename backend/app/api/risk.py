@@ -12,6 +12,7 @@ from app.models.models import RiskAssessment, Recommendation, Site, Zone, Hazard
 from app.schemas.schemas import RiskAssessmentResponse, RecommendationResponse, RiskTrendPoint
 from app.agents.site_risk_agent.agent import SiteRiskAgent
 from app.services.simulated_data import EnvironmentalSimulator, EquipmentSimulator, DemoDataGenerator
+from app.services.video_analysis import get_video_report, attach_worker_counts
 
 router = APIRouter()
 
@@ -77,12 +78,17 @@ def run_risk_analysis(site_id: str, db: Session = Depends(get_db)) -> dict:
 
     equipment_data = equip_sim.get_equipment_status(dt=now)
 
+    # Real detections from the SAME configured source video, not constants.
+    video_report = get_video_report(site_id=site_id)
+    detected_objects = video_report.get("detected_objects", [])
+    # Equipment-proximity risk follows the real video worker count.
+    equipment_data = attach_worker_counts(
+        equipment_data, video_report.get("worker_count", 0)
+    )
+
     event_data = {
-        "detected_objects": [
-            {"label": "person", "confidence": 0.88, "count": 3, "class_id": 0},
-            {"label": "excavator", "confidence": 0.91, "count": 1, "class_id": 7},
-            {"label": "truck", "confidence": 0.85, "count": 1, "class_id": 7},
-        ],
+        "detected_objects": detected_objects,
+        "worker_count": video_report.get("worker_count", 0),
         "equipment_activity": {
             e["name"]: {"status": e["status"], "activity": e["activity"]}
             for e in equipment_data

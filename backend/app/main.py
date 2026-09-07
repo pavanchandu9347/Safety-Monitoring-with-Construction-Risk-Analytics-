@@ -3,12 +3,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from app.database.database import init_db
-from app.api import sites, monitoring, hazards, risk, dashboard, demo
+from app.api import sites, monitoring, hazards, risk, dashboard, demo, safety, live
 
 app = FastAPI(
     title="Agentic Construction Risk Intelligence Platform",
-    description="Site Risk Monitoring & Hazard Detection — Milestone 1",
-    version="1.0.0",
+    description="Site Risk Monitoring & Hazard Detection (M1) · Safety Intelligence & Worker Protection (M2)",
+    version="2.0.0",
 )
 
 app.add_middleware(
@@ -25,6 +25,8 @@ app.include_router(hazards.router, prefix="/api", tags=["Hazards"])
 app.include_router(risk.router, prefix="/api", tags=["Risk Assessment"])
 app.include_router(dashboard.router, prefix="/api", tags=["Dashboard"])
 app.include_router(demo.router, prefix="/api", tags=["Demo"])
+app.include_router(safety.router, prefix="/api", tags=["Safety Intelligence"])
+app.include_router(live.router, prefix="/api", tags=["Live Analysis"])
 
 
 @app.on_event("startup")
@@ -34,6 +36,12 @@ def startup():
     seed_demo_data()
 
 
+@app.on_event("shutdown")
+def shutdown():
+    from app.live.pipeline import manager
+    manager.shutdown()
+
+
 @app.get("/api/health")
 def health_check():
-    return {"status": "ok", "milestone": 1}
+    return {"status": "ok", "milestone": 2}

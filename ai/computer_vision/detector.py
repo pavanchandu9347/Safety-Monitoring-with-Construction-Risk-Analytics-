@@ -12,7 +12,9 @@ from typing import Dict, List, Optional, Tuple
 logger = logging.getLogger(__name__)
 
 # COCO class mapping for construction-relevant objects.
-# Includes classes commonly found on construction sites.
+# Includes classes commonly found on construction sites. Deliberately excludes
+# generic/fixture classes (e.g. bench, potted plant, chair) that produce
+# irrelevant false positives on site imagery.
 CONSTRUCTION_CLASSES = frozenset({
     0,    # person
     1,    # bicycle
@@ -21,7 +23,6 @@ CONSTRUCTION_CLASSES = frozenset({
     5,    # bus
     7,    # truck
     8,    # boat (often used for transport on water)
-    14,   # bench (common site fixture)
 })
 
 COCO_LABELS: Dict[int, str] = {
@@ -32,13 +33,32 @@ COCO_LABELS: Dict[int, str] = {
     5: "bus",
     7: "truck",
     8: "boat",
-    14: "bench",
 }
 
-DEFAULT_CONF_THRESHOLD: float = 0.35
+DEFAULT_CONF_THRESHOLD: float = 0.45
 DEFAULT_IOU_THRESHOLD: float = 0.45
 MODEL_NAME: str = "yolov8n.pt"
 CONFIDENCE_SEED: int = 42
+
+
+def resolve_device(preferred: Optional[str] = None) -> str:
+    """Pick the best inference device for the current machine.
+
+    Honors an explicit override (constructor argument or ``YOLO_DEVICE`` env
+    var), otherwise uses the Apple GPU (MPS) when available to avoid pegging
+    CPU cores (heat / battery drain), falling back to ``cpu``.
+    """
+    override = preferred or os.environ.get("YOLO_DEVICE", "").strip() or None
+    if override:
+        return override
+    try:
+        import torch
+
+        if torch.backends.mps.is_available():
+            return "mps"
+    except Exception:
+        pass
+    return "cpu"
 
 
 class ConstructionSiteDetector:
@@ -62,7 +82,7 @@ class ConstructionSiteDetector:
         conf: float = DEFAULT_CONF_THRESHOLD,
         iou: float = DEFAULT_IOU_THRESHOLD,
         classes: Optional[List[int]] = None,
-        device: str = "cpu",
+        device: Optional[str] = None,
     ):
         """Initialize the detector.
 
@@ -71,13 +91,17 @@ class ConstructionSiteDetector:
             conf: Confidence threshold (0-1).
             iou: IoU NMS threshold (0-1).
             classes: Restrict detection to these COCO class IDs.
-            device: Inference device ('cpu', 'cuda', 'mps', etc.).
+            device: Inference device ('cpu', 'cuda', 'mps'). Defaults to the
+                best available device (MPS on Apple Silicon) unless the
+                ``YOLO_DEVICE`` env var is set.
         """
         self.model_path = model_path
         self.conf = conf
         self.iou = iou
-        self.classes = list(classes) if classes else None
-        self.device = device
+        # Restrict detection to construction-relevant COCO classes by default so
+        # only objects actually relevant to a construction site are reported.
+        self.classes = list(classes) if classes else sorted(CONSTRUCTION_CLASSES)
+        self.device = resolve_device(device)
         self._model = None
         self._deterministic_ready = False
 
