@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { api } from '../services/api'
 import { useSite } from '../hooks/useDashboard'
-import { Camera, Upload, Loader2, Scan, CloudCog } from 'lucide-react'
+import { Camera, Upload, Loader2, Scan, CloudCog, ListTree, FileJson, ChevronDown, Package, Users, Truck } from 'lucide-react'
+import { StatChip, Section, ActionBar } from '../components/progressive'
 
 function Spinner() { return <Loader2 className="animate-spin" size={15} /> }
 
@@ -12,6 +13,8 @@ export default function Video() {
   const [result, setResult] = useState(null)
   const [processing, setProcessing] = useState(false)
   const [error, setError] = useState(null)
+  const [detail, setDetail] = useState(null)
+  const [showRaw, setShowRaw] = useState(false)
 
   const onFileChange = (e) => {
     const f = e.target.files?.[0]
@@ -98,33 +101,57 @@ export default function Video() {
 
           {!processing && result && (
             <div className="space-y-3">
+              {/* Overview stats */}
               <div className="grid grid-cols-3 gap-3">
-                {[
-                  { l: 'WORKERS', v: result.worker_count, c: '#4aa8ff' },
-                  { l: 'VEHICLES', v: result.vehicle_count, c: '#f5a623' },
-                  { l: 'OBJECTS', v: result.detections?.length || 0, c: '#36d17e' },
-                ].map(({ l, v, c }) => (
-                  <div key={l} className="bg-[#0a0e13] border border-steel p-3 text-center">
-                    <div className="readout text-3xl font-bold tabular-nums" style={{ color: c }}>{v}</div>
-                    <div className="readout text-[9px] text-slate-500 tracking-widest mt-1">{l}</div>
-                  </div>
-                ))}
+                <StatChip icon={Users} label="Workers" value={result.worker_count}
+                  accent="#4aa8ff" />
+                <StatChip icon={Truck} label="Vehicles" value={result.vehicle_count}
+                  accent="#f5a623" />
+                <StatChip icon={Package} label="Objects" value={result.detections?.length || 0}
+                  accent="#36d17e" />
               </div>
 
-              <div className="bg-[#0a0e13] border border-steel p-3">
-                <div className="bracket-label mb-2">DETECTED OBJECT LIST</div>
-                {result.detections?.length === 0 && <div className="readout text-[11px] text-slate-500">NO OBJECTS DETECTED — TRY A DIFFERENT FRAME</div>}
-                {result.detections?.map((d, i) => (
-                  <div key={i} className="flex items-center justify-between py-1.5 border-b border-steel/40 last:border-0 readout text-[12px]">
-                    <div className="flex items-center gap-2">
-                      <span className="led bg-info" /> <span className="text-slate-200 capitalize">{d.label}</span>
-                    </div>
-                    <div className="flex items-center gap-3 text-slate-500 text-[10px]">
-                      <span>CONF {(d.confidence * 100).toFixed(0)}%</span><span>CLS {d.class_id}</span>
-                    </div>
+              {/* Action bar */}
+              <ActionBar
+                active={detail}
+                onToggle={(k) => setDetail(detail === k ? null : k)}
+                items={[
+                  { key: 'list', label: 'Object List', icon: ListTree },
+                  { key: 'raw', label: 'Raw JSON', icon: FileJson },
+                ]}
+              />
+
+              {detail === 'list' && (
+                <Section title="DETECTED OBJECT LIST" badge={`${result.detections?.length || 0} OBJECTS`} onClose={() => setDetail(null)}>
+                  {result.detections?.length === 0 && <div className="readout text-[11px] text-slate-500">NO OBJECTS DETECTED — TRY A DIFFERENT FRAME</div>}
+                  <div className="max-h-[320px] overflow-y-auto">
+                    {result.detections?.map((d, i) => (
+                      <div key={i} className="flex items-center justify-between py-1.5 border-b border-steel/40 last:border-0 readout text-[12px]">
+                        <div className="flex items-center gap-2">
+                          <span className="led bg-info" /> <span className="text-slate-200 capitalize">{d.label}</span>
+                        </div>
+                        <div className="flex items-center gap-3 text-slate-500 text-[10px]">
+                          <span>CONF {(d.confidence * 100).toFixed(0)}%</span><span>CLS {d.class_id}</span>
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
+                </Section>
+              )}
+
+              {detail === 'raw' && (
+                <Section title="RAW DETECTION OUTPUT" onClose={() => setDetail(null)}>
+                  <button onClick={() => setShowRaw(!showRaw)}
+                    className="flex items-center gap-1.5 readout text-[10px] text-slate-500 hover:text-white mb-2">
+                    <FileJson size={12} /> {showRaw ? 'HIDE ' : 'VIEW '}FULL RESPONSE <ChevronDown size={12} className={showRaw ? 'rotate-180' : ''} />
+                  </button>
+                  {showRaw && (
+                    <pre className="text-[10px] text-slate-400 bg-[#080b0f] border border-steel p-3 overflow-auto max-h-72">
+                      {JSON.stringify(result, null, 2)}
+                    </pre>
+                  )}
+                </Section>
+              )}
 
               <div className="readout text-[10px] text-ok">EVENT LOGGED: {result.event_id.slice(0, 13)}… → QUEUED FOR SITE RISK AGENT</div>
             </div>

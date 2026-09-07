@@ -2,7 +2,8 @@ import { useState, useEffect, useRef } from 'react'
 import { api } from '../services/api'
 import { useSite } from '../hooks/useDashboard'
 import { formatTime } from '../utils/risk'
-import { Radio, Play, Activity, Wind } from 'lucide-react'
+import { Radio, Play, Activity, Wind, Thermometer, Wrench, Rss, ShieldAlert } from 'lucide-react'
+import { StatChip, Section, ActionBar } from '../components/progressive'
 
 export default function Monitoring() {
   const siteId = useSite()
@@ -10,6 +11,7 @@ export default function Monitoring() {
   const [equipment, setEquipment] = useState([])
   const [environmental, setEnvironmental] = useState(null)
   const [simulating, setSimulating] = useState(false)
+  const [detail, setDetail] = useState(null)
   const feedRef = useRef(null)
 
   const load = async () => {
@@ -72,8 +74,19 @@ export default function Monitoring() {
 
       <div className="hazard-bar h-1.5 w-40 opacity-70"></div>
 
+      {/* Overview stat chips */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <StatChip icon={Rss} label="Events Buffered" value={events.length} accent="#4aa8ff" />
+        <StatChip icon={Wrench} label="Equipment Assets" value={equipment.length} accent="#f5a623"
+          sub={`${equipment.filter((e) => e.status === 'active').length} active`} />
+        <StatChip icon={Thermometer} label="Ambient" value={environmental ? `${environmental.temperature_celsius}°C` : '—'}
+          accent="#36d17e" />
+        <StatChip icon={Wind} label="Wind" value={environmental ? `${environmental.wind_speed_kmh} km/h` : '—'}
+          accent="#b794ff" />
+      </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
-        {/* Feed console */}
+        {/* Feed console (primary, always visible) */}
         <div className="lg:col-span-2 tech-panel p-4">
           <div className="bracket-label mb-3 flex items-center justify-between">
             <span>LIVE DATA CONSOLE</span>
@@ -94,40 +107,72 @@ export default function Monitoring() {
               </div>
             ))}
           </div>
+
+          {/* Action bar for detail telemetry */}
+          <div className="mt-3">
+            <ActionBar
+              active={detail}
+              onToggle={(k) => setDetail(detail === k ? null : k)}
+              items={[
+                { key: 'env', label: 'Environmental', icon: Wind },
+                { key: 'equipment', label: 'Equipment', icon: Wrench },
+                { key: 'summary', label: 'Feed Summary', icon: ShieldAlert },
+              ]}
+            />
+          </div>
         </div>
 
+        {/* Detail telemetry (progressive disclosure) */}
         <div className="space-y-3">
-          {/* Environmental readout panel */}
-          <div className="tech-panel p-4">
-            <div className="bracket-label mb-2 flex items-center gap-1.5"><Wind size={12} /> ENV. MONITOR <span className="text-slate-600">· SIM</span></div>
-            {environmental ? (
-              <div className="grid grid-cols-2 gap-2">
-                {envCells.map(([k, v]) => (
-                  <div key={k} className="bg-[#0a0e13] border border-steel px-2.5 py-2">
-                    <div className="readout text-[8px] text-slate-500 tracking-widest">{k}</div>
-                    <div className="readout text-[13px] text-slate-100 font-semibold truncate">{v}</div>
-                  </div>
-                ))}
-              </div>
-            ) : <div className="readout text-xs text-slate-500">NO DATA</div>}
-          </div>
-
-          {/* Equipment telemetry */}
-          <div className="tech-panel p-4">
-            <div className="bracket-label mb-2">EQUIPMENT STATE <span className="text-slate-600">· SIM</span></div>
-            {equipment.map((eq) => (
-              <div key={eq.name} className="flex items-center justify-between py-1.5 border-b border-steel/50 last:border-0">
-                <div className="readout">
-                  <div className="text-[12px] text-slate-200">{eq.name}</div>
-                  <div className="text-[8px] text-slate-500 tracking-widest uppercase">{eq.activity}</div>
+          {detail === 'env' && (
+            <Section title="ENVIRONMENTAL MONITOR" badge="SIM" onClose={() => setDetail(null)}>
+              {environmental ? (
+                <div className="grid grid-cols-2 gap-2">
+                  {envCells.map(([k, v]) => (
+                    <div key={k} className="bg-[#0a0e13] border border-steel px-2.5 py-2">
+                      <div className="readout text-[8px] text-slate-500 tracking-widest">{k}</div>
+                      <div className="readout text-[13px] text-slate-100 font-semibold truncate">{v}</div>
+                    </div>
+                  ))}
                 </div>
-                <span className="readout text-[9px] px-1.5 py-0.5"
-                  style={eq.status === 'active' ? { color: '#36d17e', border: '1px solid #36d17e' }
-                    : eq.status === 'maintenance' ? { color: '#f5a623', border: '1px solid #f5a623' }
-                    : { color: '#7e8c9c', border: '1px solid #2a3542' }}>{eq.status.toUpperCase()}</span>
+              ) : <div className="readout text-xs text-slate-500">NO DATA</div>}
+            </Section>
+          )}
+
+          {detail === 'equipment' && (
+            <Section title="EQUIPMENT STATE" badge="SIM" onClose={() => setDetail(null)}>
+              {equipment.map((eq) => (
+                <div key={eq.name} className="flex items-center justify-between py-1.5 border-b border-steel/50 last:border-0">
+                  <div className="readout">
+                    <div className="text-[12px] text-slate-200">{eq.name}</div>
+                    <div className="text-[8px] text-slate-500 tracking-widest uppercase">{eq.activity}</div>
+                  </div>
+                  <span className="readout text-[9px] px-1.5 py-0.5"
+                    style={eq.status === 'active' ? { color: '#36d17e', border: '1px solid #36d17e' }
+                      : eq.status === 'maintenance' ? { color: '#f5a623', border: '1px solid #f5a623' }
+                      : { color: '#7e8c9c', border: '1px solid #2a3542' }}>{eq.status.toUpperCase()}</span>
+                </div>
+              ))}
+            </Section>
+          )}
+
+          {detail === 'summary' && (
+            <Section title="FEED SUMMARY" onClose={() => setDetail(null)}>
+              <div className="space-y-1.5">
+                <div className="flex justify-between readout text-[11px] text-slate-300"><span>Events Streamed</span><span className="text-white">{events.length}</span></div>
+                <div className="flex justify-between readout text-[11px] text-slate-300"><span>Active Equipment</span><span className="text-ok">{equipment.filter((e) => e.status === 'active').length}</span></div>
+                <div className="flex justify-between readout text-[11px] text-slate-300"><span>Maintenance</span><span className="text-hazard">{equipment.filter((e) => e.status === 'maintenance').length}</span></div>
+                <div className="flex justify-between readout text-[11px] text-slate-300"><span>Weather</span><span className="text-white capitalize">{(environmental?.weather || '—').replace(/_/g, ' ')}</span></div>
               </div>
-            ))}
-          </div>
+            </Section>
+          )}
+
+          {!detail && (
+            <div className="tech-panel p-4 text-center">
+              <Activity className="mx-auto mb-2 text-slate-600" size={26} />
+              <p className="readout text-[10px] text-slate-500 tracking-widest">SELECT A TELEMETRY VIEW ABOVE FOR DETAILED READOUT</p>
+            </div>
+          )}
         </div>
       </div>
     </div>

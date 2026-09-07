@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react'
 import { api } from '../services/api'
 import { useSite } from '../hooks/useDashboard'
 import { formatDate } from '../utils/risk'
-import { Search, ShieldAlert, Filter } from 'lucide-react'
+import { Search, ShieldAlert, Filter, ListChecks, ShieldX, CheckCircle2, AlertTriangle } from 'lucide-react'
+import { StatChip, Section, ActionBar } from '../components/progressive'
 
 const STATUS = ['detected', 'investigating', 'mitigated', 'resolved']
 const LEVEL_HEX = {
@@ -21,6 +22,7 @@ export default function Hazards() {
   const [zone, setZone] = useState('')
   const [zones, setZones] = useState([])
   const [loading, setLoading] = useState(true)
+  const [detail, setDetail] = useState('register')
 
   const load = async (filters = {}) => {
     setLoading(true)
@@ -75,6 +77,14 @@ export default function Hazards() {
         </div>
       </div>
 
+      {/* Overview stat chips */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <StatChip icon={ListChecks} label="Total Registers" value={hazards.length} accent="#4aa8ff" />
+        <StatChip icon={AlertTriangle} label="Open" value={hazards.filter((h) => h.status === 'detected' || h.status === 'investigating').length} accent="#f5a623" />
+        <StatChip icon={ShieldX} label="Critical" value={hazards.filter((h) => h.severity === 'CRITICAL').length} accent="#ff5a3c" />
+        <StatChip icon={CheckCircle2} label="Resolved" value={hazards.filter((h) => h.status === 'resolved').length} accent="#36d17e" />
+      </div>
+
       {/* Filter bar */}
       <div className="hazard-bar h-1.5 w-40 opacity-70"></div>
       <div className="tech-panel p-3 flex flex-wrap items-center gap-3">
@@ -101,54 +111,81 @@ export default function Hazards() {
         </div>
       </div>
 
+      {/* Action bar */}
+      <ActionBar
+        active={detail}
+        onToggle={(k) => setDetail(detail === k ? null : k)}
+        items={[
+          { key: 'register', label: 'Hazard Register', icon: ListChecks },
+          { key: 'open', label: 'Open Only', icon: AlertTriangle },
+          { key: 'critical', label: 'Critical', icon: ShieldX },
+          { key: 'resolved', label: 'Resolved', icon: CheckCircle2 },
+          { key: 'mitigation', label: 'Mitigations', icon: ShieldAlert },
+        ]}
+      />
+
       {loading && <div className="text-center readout text-slate-500 py-10">PARSING HAZARD REGISTER...</div>}
-      {!loading && filtered.length === 0 && (
+      {!loading && filtered.length === 0 && detail !== 'mitigation' && (
         <div className="tech-panel p-8 text-center readout text-sm text-slate-500">
           NO HAZARDS MATCH FILTERS — RUN RISK ANALYSIS TO GENERATE HAZARDS
         </div>
       )}
 
-      <div className="space-y-2">
-        {filtered.map((h) => {
-          const hex = LEVEL_HEX[h.severity] || '#36d17e'
-          const sHex = STATUS_HEX[h.status] || '#7e8c9c'
-          return (
-            <div key={h.id} className="tech-panel p-3">
-              <div className="flex items-center justify-between gap-2 border-b border-steel pb-2">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="readout text-[10px] font-bold px-1.5 py-0.5 tracking-wider" style={{ color: hex, border: `1px solid ${hex}` }}>{h.severity}</span>
-                  <span className="readout text-[12px] font-bold text-white uppercase tracking-wide">{h.hazard_type.replace(/_/g, ' ')}</span>
-                  <span className="readout text-[10px] text-slate-500">· {formatDate(h.timestamp)}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="readout text-[9px] text-slate-500 tracking-widest uppercase">{h.source}</span>
-                  <button onClick={() => updateStatus(h.id, h.status === 'detected' ? 'investigating' : h.status === 'investigating' ? 'mitigated' : h.status === 'mitigated' ? 'resolved' : 'detected')}
-                    className="readout text-[10px] font-bold px-2 py-0.5 tracking-widest"
-                    style={{ color: sHex, border: `1px solid ${sHex}` }}>
-                    {h.status.toUpperCase()} ▸
-                  </button>
-                </div>
-              </div>
+      {detail && !loading && (
+        <Section title="HAZARD REGISTER" badge={`${filtered.length} RESULTS`} onClose={() => setDetail(null)}>
+          <div className="space-y-2 max-h-[640px] overflow-y-auto pr-1">
+            {filtered
+              .filter((h) => {
+                if (detail === 'open') return h.status === 'detected' || h.status === 'investigating'
+                if (detail === 'critical') return h.severity === 'CRITICAL'
+                if (detail === 'resolved') return h.status === 'resolved'
+                return true
+              })
+              .map((h) => {
+                const hex = LEVEL_HEX[h.severity] || '#36d17e'
+                const sHex = STATUS_HEX[h.status] || '#7e8c9c'
+                return (
+                  <div key={h.id} className="tech-panel p-3">
+                    <div className="flex items-center justify-between gap-2 border-b border-steel pb-2">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="readout text-[10px] font-bold px-1.5 py-0.5 tracking-wider" style={{ color: hex, border: `1px solid ${hex}` }}>{h.severity}</span>
+                        <span className="readout text-[12px] font-bold text-white uppercase tracking-wide">{h.hazard_type.replace(/_/g, ' ')}</span>
+                        <span className="readout text-[10px] text-slate-500">· {formatDate(h.timestamp)}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="readout text-[9px] text-slate-500 tracking-widest uppercase">{h.source}</span>
+                        <button onClick={() => updateStatus(h.id, h.status === 'detected' ? 'investigating' : h.status === 'investigating' ? 'mitigated' : h.status === 'mitigated' ? 'resolved' : 'detected')}
+                          className="readout text-[10px] font-bold px-2 py-0.5 tracking-widest"
+                          style={{ color: sHex, border: `1px solid ${sHex}` }}>
+                          {h.status.toUpperCase()} ▸
+                        </button>
+                      </div>
+                    </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
-                <div className="bg-[#0a0e13] border border-steel p-2.5">
-                  <div className="readout text-[9px] text-slate-500 tracking-widest">EVIDENCE · {h.source}</div>
-                  <div className="readout text-[12px] text-slate-300 italic mt-1">"{h.evidence}"</div>
-                </div>
-                <div className="bg-[#0a0e13] border border-ok/30 p-2.5">
-                  <div className="readout text-[9px] text-ok tracking-widest">RECOMMENDED MITIGATION</div>
-                  <div className="readout text-[12px] text-slate-300 mt-1">{h.recommended_mitigation}</div>
-                </div>
-              </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
+                      <div className="bg-[#0a0e13] border border-steel p-2.5">
+                        <div className="readout text-[9px] text-slate-500 tracking-widest">EVIDENCE · {h.source}</div>
+                        <div className="readout text-[12px] text-slate-300 italic mt-1">"{h.evidence}"</div>
+                      </div>
+                      <div className="bg-[#0a0e13] border border-ok/30 p-2.5">
+                        <div className="readout text-[9px] text-ok tracking-widest">RECOMMENDED MITIGATION</div>
+                        <div className="readout text-[12px] text-slate-300 mt-1">{h.recommended_mitigation}</div>
+                      </div>
+                    </div>
 
-              <div className="mt-2 flex items-center gap-4 readout text-[10px] text-slate-500">
-                <span>ZONE: {h.zone_id || 'N/A'}</span>
-                <span>RISK CONTRIBUTION: +{h.risk_contribution.toFixed(1)}</span>
-              </div>
-            </div>
-          )
-        })}
-      </div>
+                    <div className="mt-2 flex items-center gap-4 readout text-[10px] text-slate-500">
+                      <span>ZONE: {h.zone_id || 'N/A'}</span>
+                      <span>RISK CONTRIBUTION: +{h.risk_contribution.toFixed(1)}</span>
+                    </div>
+                  </div>
+                )
+              })}
+          </div>
+          {detail === 'mitigation' && filtered.length === 0 && (
+            <div className="readout text-[11px] text-slate-500">NO HAZARDS — NOTHING TO MITIGATE</div>
+          )}
+        </Section>
+      )}
     </div>
   )
 }

@@ -22,15 +22,34 @@ export const api = {
   processImage: (siteId, file) => {
     const formData = new FormData()
     formData.append('file', file)
-    formData.append('site_id', siteId)
+    // Let the browser set Content-Type with the multipart boundary; some other
+    // http clients (axios XHR) would otherwise send an invalid no-boundary
+    // multipart body that FastAPI/python-multipart cannot parse.
     return API.post('/monitoring/process-image', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
+      params: { site_id: siteId },
       timeout: 120000,
     })
   },
   getDemoScenario: () => API.get('/demo/scenario'),
   getEnvironmentalDemo: (zoneType) => API.get('/demo/environmental', { params: { zone_type: zoneType } }),
   getEquipmentDemo: () => API.get('/demo/equipment'),
+  getSafetyDashboard: (siteId) => API.get(`/sites/${siteId}/safety/dashboard`),
+  getSafetyAnalysis: (siteId) => API.post(`/sites/${siteId}/safety/analyze`),
+  getWorkers: (siteId) => API.get(`/sites/${siteId}/workers`),
+  getSafetyViolations: (siteId, params = {}) => API.get(`/sites/${siteId}/safety/violations`, { params }),
+  getSafetyAlerts: (siteId) => API.get(`/sites/${siteId}/safety/alerts`),
+  updateViolationStatus: (violationId, status) =>
+    API.patch(`/safety/violations/${violationId}/status`, null, { params: { status } }),
+
+  // ── Live video-analysis pipeline ────────────────────────────────────
+  getLiveStatus: (siteId) => API.get(`/sites/${siteId}/live/status`),
+  startLive: (siteId, body = {}) => API.post(`/sites/${siteId}/live/start`, body),
+  stopLive: (siteId) => API.post(`/sites/${siteId}/live/stop`),
+  liveVideoUrl: (siteId) => `/api/sites/${siteId}/live/video`,
+  liveWsUrl: (siteId) => {
+    const proto = window.location.protocol === 'https:' ? 'wss' : 'ws'
+    return `${proto}://${window.location.host}/api/ws/sites/${siteId}/live`
+  },
 }
 
 export default API

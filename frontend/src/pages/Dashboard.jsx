@@ -5,8 +5,19 @@ import { api } from '../services/api'
 import { useSite } from '../hooks/useDashboard'
 import {
   TrendingUp, TrendingDown, Minus, ShieldAlert, Droplets, Wrench, MapPin,
-  Activity, Crosshair, Gauge, Radio, RefreshCw
+  Activity, Crosshair, Gauge, Radio, RefreshCw, Wrench as WrenchIcon, Sparkles, ListChecks,
+  Video, Play, Square, RadioTower
 } from 'lucide-react'
+import { StatChip, Section, ActionBar } from '../components/progressive'
+
+const LIVE_META = {
+  LIVE: { label: '● LIVE ANALYSIS', color: '#36d17e' },
+  STARTING: { label: '● STARTING...', color: '#4aa8ff' },
+  RECONNECTING: { label: '● RECONNECTING...', color: '#f5a623' },
+  STOPPED: { label: '● ANALYSIS STOPPED', color: '#7e8c9c' },
+  STREAM_ENDED: { label: '● STREAM ENDED', color: '#f5a623' },
+  ERROR: { label: '● ANALYSIS ERROR', color: '#ff5a3c' },
+}
 
 const LEVEL_COLOR = {
   LOW: '#36d17e',
@@ -105,9 +116,15 @@ function ZoneTile({ zone, selected, onSelect }) {
 
 export default function Dashboard() {
   const siteId = useSite()
-  const { data, error, reload } = useDashboard(8000)
+  const { data, error, reload, live, liveTrend, startLive, stopLive } = useDashboard(8000)
   const [selectedZone, setSelectedZone] = useState(null)
   const [generating, setGenerating] = useState(false)
+  const [detail, setDetail] = useState(null)
+  const [showVideo, setShowVideo] = useState(false)
+  const liveMeta = LIVE_META[live?.status] || LIVE_META.STOPPED
+  const isLiveRunning = live?.status === 'LIVE' || live?.status === 'STARTING'
+  const apiLiveVideoUrl = api.liveVideoUrl(siteId)
+  const trend = liveTrend.length ? liveTrend : data?.risk_trend
 
   if (error && !data) {
     return (
@@ -152,6 +169,77 @@ export default function Dashboard() {
         </div>
       </div>
 
+      {/* ── Live video-analysis panel (real YOLO detection) ── */}
+      <div className="tech-panel p-4">
+        <div className="flex items-center justify-between flex-wrap gap-3 mb-3">
+          <div className="flex items-center gap-2">
+            <Video className="text-hazard" size={16} />
+            <span className="bracket-label">LIVE VIDEO ANALYSIS</span>
+            <span className="readout text-[10px] text-slate-500 tracking-widest">REAL YOLO DETECTION · SITE {siteId.toUpperCase()}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="readout text-[11px] font-bold tracking-widest flex items-center gap-1.5"
+              style={{ color: liveMeta.color }}>
+              <RadioTower size={13} /> {liveMeta.label}
+            </span>
+            {live?.last_detection && live?.status === 'LIVE' && (
+              <span className="readout text-[10px] text-slate-500 tracking-widest">
+                LAST DETECTION: {new Date(live.last_detection).toLocaleTimeString()}
+              </span>
+            )}
+            <button onClick={() => setShowVideo(!showVideo)} disabled={!isLiveRunning}
+              className="flex items-center gap-2 bg-steel hover:bg-steel-2 text-white border border-steel-2 hover:border-steel-3 disabled:opacity-40 disabled:text-slate-400 readout text-[10px] font-bold tracking-wider px-3 py-2 transition">
+              <Video size={12} /> {showVideo ? 'HIDE VIDEO' : 'VIEW VIDEO'}
+            </button>
+            <button onClick={isLiveRunning ? stopLive : startLive}
+              className={`flex items-center gap-2 readout text-[10px] font-bold tracking-wider px-3 py-2 transition ${
+                isLiveRunning
+                  ? 'bg-signal hover:bg-[#ff463c] text-black'
+                  : 'bg-info hover:bg-[#3a8ee6] text-black'
+              }`}>
+              {isLiveRunning ? <><Square size={12} /> STOP LIVE</> : <><Play size={12} /> START LIVE</>}
+            </button>
+          </div>
+        </div>
+
+        {live?.detail && live?.status === 'ERROR' && (
+          <div className="border-l-2 border-signal bg-signal/10 p-3 mb-3 readout text-[11px] text-signal">
+            {live.detail}
+          </div>
+        )}
+
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <StatChip icon={Activity} label="Workers Detected" value={live?.workers ?? 0}
+            accent="#4aa8ff" sub="live YOLO" />
+          <StatChip icon={ShieldAlert} label="PPE Violations" value={live?.violations ?? 0}
+            accent="#ff5a3c" sub={`${live?.compliance ?? 0}% compliant`} />
+          <StatChip icon={Gauge} label="Risk Score" value={(live?.risk_score ?? 0).toFixed(0)}
+            accent={LIVE_META[live?.status]?.color || '#f5a623'} sub="roll-window" />
+          <StatChip icon={ListChecks} label="Risk Level" value={live?.risk_level || '—'}
+            accent={LIVE_META[live?.status]?.color || '#f5a623'} sub="risk engine" />
+        </div>
+
+        {showVideo && isLiveRunning && (
+          <div className="mt-3 border border-steel bg-black rounded-[4px] overflow-hidden">
+            <img src={apiLiveVideoUrl} alt="live annotated" className="w-full h-auto max-h-[420px] object-contain" />
+            <div className="readout text-[9px] text-slate-500 py-1 px-2 bg-[#0a0e13] border-t border-steel flex justify-between">
+              <span>ANNOTATED STREAM · MJPEG</span>
+              <span className="text-ok">LIVE</span>
+            </div>
+          </div>
+        )}
+
+        {live?.reasons?.length > 0 && live?.status === 'LIVE' && (
+          <div className="mt-3 flex flex-wrap gap-1.5">
+            {live.reasons.map((r, i) => (
+              <span key={i} className="readout text-[9px] px-1.5 py-0.5 border border-hazard/40 bg-hazard/10 text-slate-300 tracking-wider">
+                ▸ {r.toUpperCase()}
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+
       {/* ── Hazard strip indicator ── */}
       <div className="flex items-center gap-2">
         <div className="hazard-bar h-4 w-24"></div>
@@ -166,7 +254,7 @@ export default function Dashboard() {
           <RiskDial score={risk?.overall_score || 0} level={level} />
           <div className="mt-3 w-full border-t border-steel pt-2 flex items-center justify-between">
             <span className="bracket-label">TREND</span>
-            <TrendBadge trend={data?.risk_trend} />
+            <TrendBadge trend={trend} />
           </div>
         </div>
 
@@ -246,11 +334,20 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* ── Equipment + environmental readout ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
-        <div className="lg:col-span-2 tech-panel p-4">
-          <div className="bracket-label mb-2">EQUIPMENT TELEMETRY <span className="text-slate-600">· SIMULATED</span></div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+      {/* ── Detail action bar + progressive disclosure ── */}
+      <ActionBar
+        active={detail}
+        onToggle={(k) => setDetail(detail === k ? null : k)}
+        items={[
+          { key: 'equipment', label: 'Equipment Telemetry', icon: WrenchIcon },
+          { key: 'hazards', label: 'Hazard Feed', icon: ShieldAlert },
+          { key: 'summary', label: 'Site Summary', icon: Sparkles },
+        ]}
+      />
+
+      {detail === 'equipment' && (
+        <Section title="EQUIPMENT TELEMETRY" badge={`${data.equipment?.length || 0} ASSETS · SIMULATED`} onClose={() => setDetail(null)}>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-[420px] overflow-y-auto">
             {data.equipment?.map((eq) => (
               <div key={eq.id} className="flex items-center justify-between bg-[#0a0e13] border border-steel px-3 py-2">
                 <div className="readout">
@@ -263,14 +360,37 @@ export default function Dashboard() {
                     : { color: '#7e8c9c', border: '1px solid #2a3542' }}>{eq.status.toUpperCase()}</span>
               </div>
             ))}
+            {!data.equipment?.length && <div className="readout text-[11px] text-slate-500">NO EQUIPMENT DATA</div>}
           </div>
-        </div>
+        </Section>
+      )}
 
-        <div className="tech-panel p-4">
-          <div className="bracket-label mb-2 flex items-center gap-1.5"><Droplets size={12} /> SUMMARY</div>
-          <p className="readout text-[11px] text-slate-300 leading-relaxed">{risk?.summary || 'Awaiting risk assessment...'}</p>
-        </div>
-      </div>
+      {detail === 'hazards' && (
+        <Section title="ACTIVE HAZARD FEED" badge={`${data.active_hazards?.length || 0} ACTIVE`} onClose={() => setDetail(null)}>
+          {(data.active_hazards || []).map((h) => {
+            const cc = LEVEL_COLOR[h.severity] || '#36d17e'
+            return (
+              <div key={h.id} className="flex items-center justify-between py-1.5 border-b border-steel/50 last:border-0">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="led" style={{ background: cc }} />
+                  <span className="readout text-[11px] text-slate-300 truncate capitalize">{h.hazard_type.replace(/_/g, ' ')}</span>
+                </div>
+                <span className="readout text-[9px] text-slate-500">{formatTime(h.timestamp)}</span>
+              </div>
+            )
+          })}
+          {!data.active_hazards?.length && <div className="readout text-[11px] text-slate-500">NO ACTIVE HAZARDS</div>}
+        </Section>
+      )}
+
+      {detail === 'summary' && (
+        <Section title="SITE SUMMARY" onClose={() => setDetail(null)}>
+          <div className="flex items-start gap-3">
+            <Droplets size={16} className="text-info mt-0.5 shrink-0" />
+            <p className="readout text-[11px] text-slate-300 leading-relaxed">{risk?.summary || 'Awaiting risk assessment...'}</p>
+          </div>
+        </Section>
+      )}
     </div>
   )
 }

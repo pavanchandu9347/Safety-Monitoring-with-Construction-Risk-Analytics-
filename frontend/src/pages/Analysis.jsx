@@ -3,7 +3,8 @@ import { api } from '../services/api'
 import { useSite } from '../hooks/useDashboard'
 import { formatTime } from '../utils/risk'
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
-import { Activity, RefreshCw } from 'lucide-react'
+import { Activity, RefreshCw, ToyBrick, Lightbulb, ShieldAlert, TrendingUp } from 'lucide-react'
+import { StatChip, Section, ActionBar } from '../components/progressive'
 
 const LEVEL_HEX = {
   LOW: '#36d17e', MEDIUM: '#f5a623', HIGH: '#ff7a3c', CRITICAL: '#ff5a3c',
@@ -22,6 +23,7 @@ export default function Analysis() {
   const [recommendations, setRecommendations] = useState([])
   const [loading, setLoading] = useState(true)
   const [running, setRunning] = useState(false)
+  const [detail, setDetail] = useState(null)
 
   const load = async () => {
     setLoading(true)
@@ -107,58 +109,80 @@ export default function Analysis() {
         </div>
       </div>
 
-      {/* Contributors + recommendations */}
-      <div className="grid grid-cols-1 lg:grid-cols-7 gap-3">
-        <div className="lg:col-span-4 space-y-3">
-          <div className="bracket-label">RISK CONTRIBUTORS · FACTOR ANALYSIS</div>
-          {COMPONENTS.map(({ key, label, hex }) => {
-            const factors = risk?.[`${key}_factors`] || []
-            const score = risk?.[`${key}_score`] || 0
-            return (
-              <div key={key} className="tech-panel p-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 readout text-[12px] text-slate-100 font-semibold tracking-wide">
-                    <span className="w-2 h-2" style={{ background: hex }} /> {label}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="w-36 h-2 bg-[#0a0e13] border border-steel overflow-hidden">
-                      <div className="h-full" style={{ width: `${score}%`, background: hex }} />
-                    </div>
-                    <span className="readout text-[12px] font-bold text-white w-8 text-right tabular-nums">{Math.round(score)}</span>
-                  </div>
-                </div>
-                <div className="mt-2 space-y-1">
-                  {factors.length > 0 ? factors.map((f, i) => (
-                    <div key={i} className="readout text-[11px] text-slate-300 flex items-start gap-2">
-                      <span className="text-slate-600 mt-0.5">›</span> {f}
-                    </div>
-                  )) : (
-                    <div className="readout text-[11px] text-slate-500">NO CONTRIBUTING FACTORS DETECTED</div>
-                  )}
-                </div>
-              </div>
-            )
-          })}
-        </div>
-
-        <div className="lg:col-span-3 tech-panel p-4">
-          <div className="bracket-label mb-3">RECOMMENDED ACTIONS</div>
-          {recommendations.length === 0 && <div className="readout text-slate-500 text-center py-8 text-sm">NO RECOMMENDATIONS YET</div>}
-          {recommendations.map((rec) => {
-            const c = LEVEL_HEX[rec.priority] || '#36d17e'
-            return (
-              <div key={rec.id} className="border border-steel bg-[#0a0e13] p-3 mb-2 border-l-2" style={{ borderLeftColor: c }}>
-                <div className="flex items-center justify-between">
-                  <span className="readout text-[10px] font-bold tracking-widest" style={{ color: c }}>{rec.priority}</span>
-                  <span className="readout text-[9px] text-slate-500 uppercase">{rec.hazard_type.replace(/_/g, ' ')}</span>
-                </div>
-                <div className="text-[13px] text-white font-semibold mt-1.5 readout">{rec.title}</div>
-                <p className="text-[11px] text-slate-400 mt-1 readout">{rec.description}</p>
-              </div>
-            )
-          })}
-        </div>
+      {/* Overview chips */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <StatChip icon={ShieldAlert} label="Current Score" value={risk?.overall_score?.toFixed(0) ?? '—'} accent={color} />
+        <StatChip icon={TrendingUp} label="Assessments" value={history.length} accent="#4aa8ff" />
+        <StatChip icon={ToyBrick} label="Contributors" value={COMPONENTS.filter((c) => (risk?.[`${c.key}_score`] || 0) >= 50).length}
+          accent="#f5a623" sub="high-impact factors" />
+        <StatChip icon={Lightbulb} label="Recommendations" value={recommendations.length} accent="#36d17e" />
       </div>
+
+      {/* Action bar */}
+      <ActionBar
+        active={detail}
+        onToggle={(k) => setDetail(detail === k ? null : k)}
+        items={[
+          { key: 'contributors', label: 'Contributors', icon: ToyBrick },
+          { key: 'recommendations', label: 'Recommendations', icon: Lightbulb },
+        ]}
+      />
+
+      {detail === 'contributors' && (
+        <Section title="RISK CONTRIBUTORS · FACTOR ANALYSIS" badge={`${COMPONENTS.length} DIMENSIONS`} onClose={() => setDetail(null)}>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+            {COMPONENTS.map(({ key, label, hex }) => {
+              const factors = risk?.[`${key}_factors`] || []
+              const score = risk?.[`${key}_score`] || 0
+              return (
+                <div key={key} className="tech-panel p-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 readout text-[12px] text-slate-100 font-semibold tracking-wide">
+                      <span className="w-2 h-2" style={{ background: hex }} /> {label}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="w-36 h-2 bg-[#0a0e13] border border-steel overflow-hidden">
+                        <div className="h-full" style={{ width: `${score}%`, background: hex }} />
+                      </div>
+                      <span className="readout text-[12px] font-bold text-white w-8 text-right tabular-nums">{Math.round(score)}</span>
+                    </div>
+                  </div>
+                  <div className="mt-2 space-y-1">
+                    {factors.length > 0 ? factors.map((f, i) => (
+                      <div key={i} className="readout text-[11px] text-slate-300 flex items-start gap-2">
+                        <span className="text-slate-600 mt-0.5">›</span> {f}
+                      </div>
+                    )) : (
+                      <div className="readout text-[11px] text-slate-500">NO CONTRIBUTING FACTORS DETECTED</div>
+                    )}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </Section>
+      )}
+
+      {detail === 'recommendations' && (
+        <Section title="RECOMMENDED ACTIONS" badge={`${recommendations.length} ACTIVE`} onClose={() => setDetail(null)}>
+          {recommendations.length === 0 && <div className="readout text-slate-500 text-center py-8 text-sm">NO RECOMMENDATIONS YET</div>}
+          <div className="max-h-[480px] overflow-y-auto">
+            {recommendations.map((rec) => {
+              const c = LEVEL_HEX[rec.priority] || '#36d17e'
+              return (
+                <div key={rec.id} className="border border-steel bg-[#0a0e13] p-3 mb-2 border-l-2" style={{ borderLeftColor: c }}>
+                  <div className="flex items-center justify-between">
+                    <span className="readout text-[10px] font-bold tracking-widest" style={{ color: c }}>{rec.priority}</span>
+                    <span className="readout text-[9px] text-slate-500 uppercase">{rec.hazard_type.replace(/_/g, ' ')}</span>
+                  </div>
+                  <div className="text-[13px] text-white font-semibold mt-1.5 readout">{rec.title}</div>
+                  <p className="text-[11px] text-slate-400 mt-1 readout">{rec.description}</p>
+                </div>
+              )
+            })}
+          </div>
+        </Section>
+      )}
     </div>
   )
 }
