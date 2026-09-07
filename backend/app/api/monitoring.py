@@ -11,15 +11,11 @@ from datetime import datetime, timezone
 from app.database.database import get_db
 from app.models.models import MonitoringEvent, Site, Zone
 from app.schemas.schemas import MonitoringEventCreate, MonitoringEventResponse
-from app.services.simulated_data import EnvironmentalSimulator, EquipmentSimulator
-from app.services.video_analysis import get_video_report
+from app.services.analysis_pipeline import run_analysis, get_latest_analysis, build_analysis_response
 from ai.computer_vision.detector import ConstructionSiteDetector
 from ai.computer_vision.ppe_detector import get_ppe_detector, PPEModelUnavailable
 
 router = APIRouter()
-
-env_sim = EnvironmentalSimulator()
-equip_sim = EquipmentSimulator()
 
 
 @router.get("/sites/{site_id}/monitoring", response_model=list[MonitoringEventResponse])
@@ -46,61 +42,32 @@ def create_monitoring_event(data: MonitoringEventCreate, db: Session = Depends(g
 
 @router.post("/monitoring/simulate")
 def simulate_monitoring(site_id: str = "site_riverside_main", db: Session = Depends(get_db)):
-    import uuid
+    """Run the unified video pipeline and return its live-monitoring payload.
 
+    Kept behind the URL the front end already calls, but now produces real
+    video-derived monitoring data under one shared ``analysis_id``.
+    """
     site = db.query(Site).filter(Site.id == site_id).first()
     if not site:
         raise HTTPException(status_code=404, detail="Site not found")
 
-    zones = db.query(Zone).filter(Zone.site_id == site_id).all()
-    now = datetime.now(timezone.utc)
-
-    env_conditions = {}
-    for zone in zones:
-        env_conditions[zone.name] = env_sim.generate_conditions(
-            zone_type=zone.zone_type, dt=now
-        )
-
-    equipment_data = equip_sim.get_equipment_status(dt=now)
-
-    # Real detections from the SAME configured source video, not constants.
-    video_report = get_video_report(site_id=site_id)
-    detected_objects = video_report.get("detected_objects", [])
-    worker_count = video_report.get("worker_count", 0)
-    vehicle_count = video_report.get("vehicle_count", 0)
-
-    active_equip = {e["name"]: {"status": e["status"], "activity": e["activity"]}
-                    for e in equipment_data if e["status"] == "active"}
-
-    first_zone = zones[0] if zones else None
-    event = MonitoringEvent(
-        id=str(uuid.uuid4()),
-        site_id=site_id,
-        zone_id=first_zone.id if first_zone else None,
-        event_type="simulated_monitoring",
-        source="demo_simulation",
-        detected_objects=detected_objects,
-        equipment_activity=active_equip,
-        environmental_conditions=env_conditions,
-        site_conditions={"ground_condition": "Wet", "lighting_condition": "Adequate"},
-        description=(
-            f"CV monitoring: {worker_count} worker(s), {vehicle_count} "
-            f"vehicle(s) on live video at {now.strftime('%H:%M:%S')}"
-        ),
-        timestamp=now,
-    )
-    db.add(event)
-    db.commit()
-    db.refresh(event)
+    result = run_analysis(db, site_id=site_id)
+    if result.get("status") == "failed":
+        raise HTTPException(status_code=400, detail=result.get("error", "Analysis failed"))
 
     return {
-        "event_id": event.id,
-        "environmental_data": env_conditions,
-        "equipment_data": equipment_data,
-        "detected_objects": detected_objects,
-        "worker_count": worker_count,
-        "vehicle_count": vehicle_count,
-        "timestamp": now.isoformat(),
+        "event_id": result.get("event_id"),
+        "analysis_id": result.get("analysis_id"),
+        "environmental_data": {
+            "evidence_note": result.get("evidence_note", ""),
+            "lighting_condition": result.get("video", {}).get("lighting_condition", ""),
+        },
+        "equipment_data": result.get("equipment", []),
+        "detected_objects": result.get("detected_objects", []),
+        "worker_count": result.get("worker_count", 0),
+        "vehicle_count": result.get("vehicle_count", 0),
+        "events": result.get("events", []),
+        "timestamp": result.get("timestamp"),
     }
 
 
@@ -212,7 +179,7 @@ def _run_image_safety(
     """Run the Safety Agent consuming real, image-derived worker PPE."""
     from app.models.models import Zone, Equipment
     from app.agents.safety_agent.agent import SafetyAgent
-    from app.services.simulated_data import SafetyAlertGenerator
+    from app.services.safety_alerts import build_safety_alerts
 
     zones = db.query(Zone).filter(Zone.site_id == site_id).all()
     equipment = db.query(Equipment).filter(Equipment.site_id == site_id).all()
@@ -238,8 +205,9 @@ def _run_image_safety(
         for e in equipment
     ]
     site_conditions = {
-        "ground_condition": "Known",
-        "lighting_condition": "Known",
+        "ground_condition": "",
+        "lighting_condition": "Image evidence only",
+        "evidence_note": "Image analysis; environmental dimensions not available.",
     }
 
     agent = SafetyAgent()
@@ -252,28 +220,21 @@ def _run_image_safety(
         ppe_source="ppe_detection",
     )
 
+    alert_seed = [
+        {"status": "open", "severity": v.get("severity", "LOW")}
+        for v in result["ppe_compliance"].get("violations", [])
+    ] + [
+        {"status": "open", "severity": h.get("severity", "LOW")}
+        for h in result["hazards"]
+    ]
     return {
         "overall_safety_score": result["overall_safety_score"],
         "overall_safety_level": result["overall_safety_level"],
         "violations": result["hazards"],
-        "alerts": [
-            {
-                "alert_type": a["alert_type"],
-                "message": a["message"],
-                "severity": a["severity"],
-            }
-            for a in SafetyAlertGenerator().generate(
-                [
-                    {"status": "open", "severity": v.get("severity", "LOW")}
-                    for v in result["ppe_compliance"].get("violations", [])
-                ]
-                + [
-                    {"status": "open", "severity": h.get("severity", "LOW")}
-                    for h in result["hazards"]
-                ],
-                result["ppe_compliance"]["compliance_rate"],
-                result["overall_safety_level"],
-            )
-        ],
+        "alerts": build_safety_alerts(
+            alert_seed,
+            result["ppe_compliance"]["compliance_rate"],
+            result["overall_safety_level"],
+        ),
         "recommendations": result["recommendations"],
     }

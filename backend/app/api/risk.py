@@ -3,23 +3,16 @@ import os
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from datetime import datetime, timezone
 
 from app.database.database import get_db
-from app.models.models import RiskAssessment, Recommendation, Site, Zone, Hazard
+from app.models.models import RiskAssessment, Recommendation, Site
 from app.schemas.schemas import RiskAssessmentResponse, RecommendationResponse, RiskTrendPoint
-from app.agents.site_risk_agent.agent import SiteRiskAgent
-from app.services.simulated_data import EnvironmentalSimulator, EquipmentSimulator, DemoDataGenerator
-from app.services.video_analysis import get_video_report, attach_worker_counts
+from app.services.analysis_pipeline import run_analysis, build_analysis_response, get_latest_analysis
 
 router = APIRouter()
-
-agent = SiteRiskAgent()
-env_sim = EnvironmentalSimulator()
-equip_sim = EquipmentSimulator()
-demo_gen = DemoDataGenerator()
 
 
 @router.get("/sites/{site_id}/risk", response_model=RiskAssessmentResponse)
@@ -31,7 +24,7 @@ def get_current_risk(site_id: str, db: Session = Depends(get_db)):
         .first()
     )
     if not risk:
-        return run_risk_analysis(site_id, db)
+        raise HTTPException(status_code=404, detail="No risk assessment yet — run a video analysis")
     return risk
 
 
@@ -62,121 +55,35 @@ def get_recommendations(site_id: str, db: Session = Depends(get_db)):
 
 @router.post("/sites/{site_id}/risk/analyze")
 def run_risk_analysis(site_id: str, db: Session = Depends(get_db)) -> dict:
-    import uuid
+    """Re-run the unified video pipeline and return its risk payload.
 
-    now = datetime.now(timezone.utc)
+    The pipeline is the platform's single analysis path: one input video, one
+    ``analysis_id``, all agents consuming the same video-derived evidence.
+    """
+    site = db.query(Site).filter(Site.id == site_id).first()
+    if not site:
+        raise HTTPException(status_code=404, detail="Site not found")
 
-    zones = db.query(Zone).filter(Zone.site_id == site_id).all()
-    zone_names = [z.name for z in zones]
-    zone_types = [z.zone_type for z in zones]
-
-    env_data = {}
-    for zone in zones:
-        env_data[zone.name] = env_sim.generate_conditions(
-            zone_type=zone.zone_type, dt=now
-        )
-
-    equipment_data = equip_sim.get_equipment_status(dt=now)
-
-    # Real detections from the SAME configured source video, not constants.
-    video_report = get_video_report(site_id=site_id)
-    detected_objects = video_report.get("detected_objects", [])
-    # Equipment-proximity risk follows the real video worker count.
-    equipment_data = attach_worker_counts(
-        equipment_data, video_report.get("worker_count", 0)
-    )
-
-    event_data = {
-        "detected_objects": detected_objects,
-        "worker_count": video_report.get("worker_count", 0),
-        "equipment_activity": {
-            e["name"]: {"status": e["status"], "activity": e["activity"]}
-            for e in equipment_data
-        },
-    }
-
-    primary_env = env_data.get(zone_names[0], env_sim.generate_conditions(dt=now))
-    site_conditions = {
-        "ground_condition": primary_env.get("ground_condition", "Dry"),
-        "lighting_condition": primary_env.get("lighting_condition", "Good"),
-    }
-
-    result = agent.analyze_site(
-        event_data=event_data,
-        equipment_data=equipment_data,
-        environmental_data=primary_env,
-        site_conditions=site_conditions,
-        detected_objects=event_data["detected_objects"],
-    )
-
-    risk_data = result["risk_assessment"]
-    risk_id = str(uuid.uuid4())
-    risk_assessment = RiskAssessment(
-        id=risk_id,
-        site_id=site_id,
-        timestamp=now,
-        overall_score=risk_data["overall_score"],
-        risk_level=risk_data["risk_level"],
-        environmental_score=risk_data["environmental_score"],
-        equipment_score=risk_data["equipment_score"],
-        site_condition_score=risk_data["site_condition_score"],
-        activity_score=risk_data["activity_score"],
-        environmental_factors=risk_data["environmental_factors"],
-        equipment_factors=risk_data["equipment_factors"],
-        site_condition_factors=risk_data["site_condition_factors"],
-        activity_factors=risk_data["activity_factors"],
-        summary=risk_data["summary"],
-    )
-    db.add(risk_assessment)
-
-    for hazard_data in result["hazards"]:
-        hazard_id = str(uuid.uuid4())
-        severity_map = {"low": "LOW", "medium": "MEDIUM", "high": "HIGH", "critical": "CRITICAL"}
-        severity = severity_map.get(
-            hazard_data.get("severity", "medium").lower(), "MEDIUM"
-        )
-        hazard = Hazard(
-            id=hazard_id,
-            site_id=site_id,
-            zone_id=None,
-            hazard_type=hazard_data.get("hazard_type", "unknown"),
-            description=hazard_data.get("description", ""),
-            severity=severity,
-            risk_contribution=hazard_data.get("risk_contribution", 0),
-            evidence=hazard_data.get("evidence", ""),
-            source=hazard_data.get("source", "site_risk_agent"),
-            recommended_mitigation=hazard_data.get("recommended_mitigation", ""),
-            status="detected",
-            timestamp=now,
-        )
-        db.add(hazard)
-
-        rec_data = next(
-            (r for r in result["recommendations"] if r.get("related_hazard_id") == hazard_data.get("hazard_type")),
-            result["recommendations"][0] if result["recommendations"] else None,
-        )
-        if rec_data:
-            rec = Recommendation(
-                id=str(uuid.uuid4()),
-                risk_assessment_id=risk_id,
-                site_id=site_id,
-                title=rec_data.get("title", ""),
-                description=rec_data.get("description", ""),
-                priority=rec_data.get("priority", "MEDIUM"),
-                hazard_type=rec_data.get("hazard_type", ""),
-                related_hazard_id=hazard_id,
-                status="pending",
-                created_at=now,
-            )
-            db.add(rec)
-
-    for zone in zones:
-        zone.current_risk_score = risk_data["overall_score"]
-        zone.risk_level = risk_data["risk_level"]
-    db.commit()
+    result = run_analysis(db, site_id=site_id)
+    if result.get("status") == "failed":
+        raise HTTPException(status_code=400, detail=result.get("error", "Analysis failed"))
 
     return {
-        "risk_assessment": RiskAssessmentResponse.model_validate(risk_assessment).model_dump(),
-        "hazards_count": len(result["hazards"]),
-        "recommendations_count": len(result["recommendations"]),
+        "status": "success",
+        "analysis_id": result["analysis_id"],
+        "risk_assessment": result.get("risk", {}),
+        "hazards_count": len(result.get("hazards", [])),
+        "recommendations_count": len(result.get("recommendations", [])),
+        "worker_count": result.get("worker_count", 0),
+        "video": result.get("video", {}),
+        "evidence_note": result.get("evidence_note", ""),
     }
+
+
+@router.get("/sites/{site_id}/risk/latest")
+def get_latest_risk_analysis(site_id: str, db: Session = Depends(get_db)):
+    """Full latest-analysis payload (risk + safety + evidence)."""
+    analysis = get_latest_analysis(db, site_id)
+    if not analysis:
+        return {"status": "none", "message": "No video analysis yet. Run Analyze Video first."}
+    return build_analysis_response(db, analysis)

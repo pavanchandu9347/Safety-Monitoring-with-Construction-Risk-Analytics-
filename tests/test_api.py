@@ -55,7 +55,8 @@ def test_demo_generate():
 def test_demo_scenario():
     r = client.get("/api/demo/scenario")
     assert r.status_code == 200
-    assert "zones" in r.json()
+    assert "analysis_id" in r.json()
+    assert "risk_level" in r.json()
 
 
 def test_invalid_monitoring_event():

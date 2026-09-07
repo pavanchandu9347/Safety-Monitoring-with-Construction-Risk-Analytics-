@@ -46,6 +46,50 @@ class Site(Base):
     safety_assessments = relationship("SafetyAssessment", back_populates="site", cascade="all, delete-orphan")
 
 
+class VideoAnalysis(Base):
+    """A single analysis pass over ONE construction-site video (primary input).
+
+    Every other analysis record (risk, safety, hazards, events, workers,
+    equipment, violations, alerts) carries an ``analysis_id`` pointing back to
+    this row, so all agents consume the SAME video-derived evidence set.
+    """
+
+    __tablename__ = "video_analyses"
+
+    id = Column(String, primary_key=True, default=gen_uuid)
+    site_id = Column(String, ForeignKey("sites.id"), nullable=False)
+    original_filename = Column(String, default="")
+    stored_path = Column(String, default="")
+    source_type = Column(String, default="stored")  # 'stored' | 'uploaded'
+    status = Column(String, default="processing")  # processing | completed | failed
+    error = Column(Text, default="")
+
+    duration_seconds = Column(Float, default=0.0)
+    fps = Column(Float, default=0.0)
+    width = Column(Integer, default=0)
+    height = Column(Integer, default=0)
+    frame_count = Column(Integer, default=0)
+
+    frame_interval = Column(Integer, default=15)
+    max_frames = Column(Integer, default=30)
+    frames_analyzed = Column(Integer, default=0)
+    model_used = Column(String, default="")
+
+    worker_count = Column(Integer, default=0)
+    vehicle_count = Column(Integer, default=0)
+    helmet_violations = Column(Integer, default=0)
+    vest_violations = Column(Integer, default=0)
+    other_violations = Column(Integer, default=0)
+    total_violations = Column(Integer, default=0)
+    ppe_compliance = Column(Float, default=100.0)
+    detected_objects = Column(JSON, default=list)
+    ppe_workers = Column(JSON, default=dict)
+    evidence = Column(JSON, default=dict)
+    timestamp = Column(DateTime, default=datetime.utcnow)
+
+    site = relationship("Site")
+
+
 class Zone(Base):
     __tablename__ = "zones"
 
@@ -68,6 +112,7 @@ class MonitoringEvent(Base):
 
     id = Column(String, primary_key=True, default=gen_uuid)
     site_id = Column(String, ForeignKey("sites.id"), nullable=False)
+    analysis_id = Column(String, ForeignKey("video_analyses.id"), nullable=True, index=True)
     zone_id = Column(String, ForeignKey("zones.id"), nullable=True)
     timestamp = Column(DateTime, default=datetime.utcnow)
     event_type = Column(String, nullable=False)
@@ -88,6 +133,7 @@ class Hazard(Base):
 
     id = Column(String, primary_key=True, default=gen_uuid)
     site_id = Column(String, ForeignKey("sites.id"), nullable=False)
+    analysis_id = Column(String, ForeignKey("video_analyses.id"), nullable=True, index=True)
     zone_id = Column(String, ForeignKey("zones.id"), nullable=True)
     hazard_type = Column(String, nullable=False)
     description = Column(Text, nullable=False)
@@ -110,6 +156,7 @@ class RiskAssessment(Base):
 
     id = Column(String, primary_key=True, default=gen_uuid)
     site_id = Column(String, ForeignKey("sites.id"), nullable=False)
+    analysis_id = Column(String, ForeignKey("video_analyses.id"), nullable=True, index=True)
     timestamp = Column(DateTime, default=datetime.utcnow)
     overall_score = Column(Float, default=0.0)
     risk_level = Column(String, default="LOW")
@@ -145,6 +192,7 @@ class Recommendation(Base):
     id = Column(String, primary_key=True, default=gen_uuid)
     risk_assessment_id = Column(String, ForeignKey("risk_assessments.id"), nullable=False)
     site_id = Column(String, ForeignKey("sites.id"), nullable=False)
+    analysis_id = Column(String, ForeignKey("video_analyses.id"), nullable=True, index=True)
     title = Column(String, nullable=False)
     description = Column(Text, nullable=False)
     priority = Column(String, default="medium")
@@ -161,6 +209,7 @@ class Equipment(Base):
 
     id = Column(String, primary_key=True, default=gen_uuid)
     site_id = Column(String, ForeignKey("sites.id"), nullable=False)
+    analysis_id = Column(String, ForeignKey("video_analyses.id"), nullable=True, index=True)
     name = Column(String, nullable=False)
     equipment_type = Column(String, nullable=False)
     status = Column(String, default="idle")
@@ -181,6 +230,7 @@ class Worker(Base):
 
     id = Column(String, primary_key=True, default=gen_uuid)
     site_id = Column(String, ForeignKey("sites.id"), nullable=False)
+    analysis_id = Column(String, ForeignKey("video_analyses.id"), nullable=True, index=True)
     name = Column(String, default="")
     role = Column(String, default="worker")
     zone_id = Column(String, ForeignKey("zones.id"), nullable=True)
@@ -201,6 +251,7 @@ class SafetyViolation(Base):
 
     id = Column(String, primary_key=True, default=gen_uuid)
     site_id = Column(String, ForeignKey("sites.id"), nullable=False)
+    analysis_id = Column(String, ForeignKey("video_analyses.id"), nullable=True, index=True)
     zone_id = Column(String, ForeignKey("zones.id"), nullable=True)
     worker_id = Column(String, ForeignKey("workers.id"), nullable=True)
     violation_type = Column(String, nullable=False)
@@ -223,6 +274,7 @@ class SafetyAlert(Base):
 
     id = Column(String, primary_key=True, default=gen_uuid)
     site_id = Column(String, ForeignKey("sites.id"), nullable=False)
+    analysis_id = Column(String, ForeignKey("video_analyses.id"), nullable=True, index=True)
     zone_id = Column(String, ForeignKey("zones.id"), nullable=True)
     alert_type = Column(String, nullable=False)
     message = Column(Text, default="")
@@ -240,6 +292,7 @@ class SafetyAssessment(Base):
 
     id = Column(String, primary_key=True, default=gen_uuid)
     site_id = Column(String, ForeignKey("sites.id"), nullable=False)
+    analysis_id = Column(String, ForeignKey("video_analyses.id"), nullable=True, index=True)
     timestamp = Column(DateTime, default=datetime.utcnow)
     overall_safety_score = Column(Float, default=0.0)
     overall_safety_level = Column(String, default="LOW")

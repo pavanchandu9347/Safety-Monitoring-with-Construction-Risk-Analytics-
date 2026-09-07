@@ -35,3 +35,9 @@ ai/models/ppe_train/
 # Keep placeholder directories but not their contents by default
 data/raw/.gitkeep
 data/processed/.gitkeep
+
+# Root-level construction videos (operational data, too large for git)
+/*.mp4
+/*.mkv
+/*.mov
+/*.avi

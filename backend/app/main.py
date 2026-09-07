@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from app.database.database import init_db
-from app.api import sites, monitoring, hazards, risk, dashboard, demo, safety, live
+from app.api import sites, monitoring, hazards, risk, dashboard, demo, safety, live, video
 
 app = FastAPI(
     title="Agentic Construction Risk Intelligence Platform",
@@ -27,6 +27,7 @@ app.include_router(dashboard.router, prefix="/api", tags=["Dashboard"])
 app.include_router(demo.router, prefix="/api", tags=["Demo"])
 app.include_router(safety.router, prefix="/api", tags=["Safety Intelligence"])
 app.include_router(live.router, prefix="/api", tags=["Live Analysis"])
+app.include_router(video.router, prefix="/api", tags=["Video Analysis"])
 
 
 @app.on_event("startup")

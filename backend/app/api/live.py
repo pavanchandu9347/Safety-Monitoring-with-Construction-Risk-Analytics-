@@ -30,15 +30,12 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from app.live import pipeline as pipeline_mod
+from app.config import default_video_source
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-DEFAULT_VIDEO_SOURCE = os.environ.get(
-    "VIDEO_SOURCE",
-    "/Users/pavanchandu/Downloads/Site_construction.mp4",
-)
 DEFAULT_CONF = float(os.environ.get("YOLO_CONFIDENCE", "0.45"))
 
 
@@ -50,9 +47,10 @@ class StartRequest(BaseModel):
 def _resolve_source(site_id: str, video_path: str = "") -> str | int:
     if video_path:
         return video_path
-    if isinstance(DEFAULT_VIDEO_SOURCE, str) and DEFAULT_VIDEO_SOURCE.isdigit():
-        return int(DEFAULT_VIDEO_SOURCE)
-    return DEFAULT_VIDEO_SOURCE
+    source = default_video_source()
+    if isinstance(source, str) and source.isdigit():
+        return int(source)
+    return source
 
 
 @router.get("/sites/{site_id}/live/status")

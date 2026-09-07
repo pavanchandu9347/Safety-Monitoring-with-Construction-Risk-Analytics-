@@ -89,6 +89,8 @@ class TestUnsafeBehaviorDetector:
         equipment = [
             {"name": "Crane-01", "equipment_type": "crane", "status": "active",
              "activity": "lifting", "nearby_worker_count": 2},
+            {"name": "Excavator-01", "equipment_type": "excavator", "status": "active",
+             "activity": "excavation", "nearby_worker_count": 1},
         ]
         events = detector.analyze([], equipment,
                                   {"ground_condition": "Wet"},

@@ -1,12 +1,12 @@
-"""Seed the database with demo data on first startup."""
+"""Seed the database with the reference project/site/zone scaffold on first
+startup. Analysis rows (equipment, workers, events, hazards, …) are NO longer
+seeded: they are produced solely by the unified video-analysis pipeline.
+"""
 
-from datetime import datetime, timezone
 from app.database.database import SessionLocal
 from app.models.models import (
-    Project, Site, Zone, Equipment, MonitoringEvent, Worker,
-    SafetyViolation, SafetyAlert, SafetyAssessment,
+    Project, Site, Zone,
 )
-from app.services.simulated_data import WorkerSafetySimulator
 
 
 def seed_demo_data():
@@ -64,119 +64,6 @@ def seed_demo_data():
             ),
         ]
         db.add_all(zones)
-
-        equipment = [
-            Equipment(
-                id="eq_excavator_01",
-                site_id="site_riverside_main",
-                name="Excavator-01",
-                equipment_type="excavator",
-                status="active",
-                zone_id="zone_a",
-                activity="excavation",
-                operating_duration_minutes=240,
-                maintenance_status="operational",
-                nearby_worker_count=3,
-            ),
-            Equipment(
-                id="eq_dump_truck_01",
-                site_id="site_riverside_main",
-                name="Dump Truck-01",
-                equipment_type="dump_truck",
-                status="active",
-                zone_id="zone_a",
-                activity="hauling",
-                operating_duration_minutes=180,
-                maintenance_status="operational",
-                nearby_worker_count=1,
-            ),
-            Equipment(
-                id="eq_crane_01",
-                site_id="site_riverside_main",
-                name="Crane-01",
-                equipment_type="crane",
-                status="active",
-                zone_id="zone_c",
-                activity="lifting",
-                operating_duration_minutes=300,
-                maintenance_status="due_soon",
-                nearby_worker_count=5,
-            ),
-            Equipment(
-                id="eq_bulldozer_01",
-                site_id="site_riverside_main",
-                name="Bulldozer-01",
-                equipment_type="bulldozer",
-                status="idle",
-                zone_id="zone_a",
-                activity="idle",
-                operating_duration_minutes=60,
-                maintenance_status="operational",
-                nearby_worker_count=0,
-            ),
-            Equipment(
-                id="eq_mixer_01",
-                site_id="site_riverside_main",
-                name="Cement Mixer-01",
-                equipment_type="cement_mixer",
-                status="active",
-                zone_id="zone_c",
-                activity="mixing",
-                operating_duration_minutes=120,
-                maintenance_status="overdue",
-                nearby_worker_count=2,
-            ),
-        ]
-        db.add_all(equipment)
-
-        now = datetime.now(timezone.utc)
-        event = MonitoringEvent(
-            id="evt_demo_001",
-            site_id="site_riverside_main",
-            zone_id="zone_a",
-            event_type="construction_activity",
-            source="demo_simulation",
-            detected_objects=[
-                {"label": "person", "confidence": 0.89, "count": 3, "class_id": 0},
-                {"label": "excavator", "confidence": 0.92, "count": 1, "class_id": 7},
-                {"label": "truck", "confidence": 0.85, "count": 1, "class_id": 7},
-            ],
-            equipment_activity={
-                "excavator_01": {"status": "active", "activity": "excavation"},
-                "dump_truck_01": {"status": "active", "activity": "hauling"},
-            },
-            environmental_conditions={
-                "weather": "Rainy",
-                "visibility": "Poor",
-                "temperature_celsius": 18,
-                "humidity_percent": 85,
-                "wind_speed_kmh": 32,
-            },
-            site_conditions={
-                "ground_condition": "Wet",
-                "lighting_condition": "Adequate",
-            },
-            description="Active excavation with heavy equipment in poor weather conditions",
-            timestamp=now,
-        )
-        db.add(event)
-
-        # ── Milestone 2 · Safety demo data ────────────────────────────────
-        worker_sim = WorkerSafetySimulator()
-        for w in worker_sim.get_workers(dt=now):
-            db.add(
-                Worker(
-                    id="wrk_" + w["worker_id"].replace("-", ""),
-                    site_id="site_riverside_main",
-                    name=w.get("worker_name", w["worker_id"]),
-                    role=w.get("worker_role", "worker"),
-                    ppe_status=w["ppe_status"],
-                    missing_ppe=w["missing_ppe"],
-                    detected_ppe=w["detected_ppe"],
-                    is_present=1,
-                    last_seen=now,
-                )
-            )
         db.commit()
     except Exception as e:
         db.rollback()

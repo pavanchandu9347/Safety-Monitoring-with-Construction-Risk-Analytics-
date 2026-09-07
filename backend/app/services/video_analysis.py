@@ -21,23 +21,27 @@ import time
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-logger = logging.getLogger(__name__)
-
-# The default video source is the SAME one the live pipeline uses (env-driven,
-# falling back to the project's construction site demo clip).
-DEFAULT_VIDEO_SOURCE: str = os.environ.get(
-    "VIDEO_SOURCE",
-    "/Users/pavanchandu/Downloads/Site_construction.mp4",
+from app.config import (
+    CONFIDENCE_THRESHOLD,
+    FRAME_SAMPLE_RATE,
+    MAX_FRAMES,
+    PROCESS_WIDTH,
+    default_video_source,
 )
 
-DEFAULT_CONF: float = float(os.environ.get("YOLO_CONFIDENCE", "0.45"))
+logger = logging.getLogger(__name__)
+
+# The default video source is resolved to the construction-site video present in
+# the project folder (env-driven via VIDEO_SOURCE). If several videos exist the
+# caller passes an explicit path; the frontend exposes a selector.
+DEFAULT_CONF: float = float(CONFIDENCE_THRESHOLD)
 
 # Number of video frames to skip between analysis samples.
-SAMPLE_INTERVAL: int = 25
+SAMPLE_INTERVAL: int = int(FRAME_SAMPLE_RATE)
 # Maximum number of sampled frames analyzed per report.
-MAX_SAMPLES: int = 16
+MAX_SAMPLES: int = int(MAX_FRAMES)
 # Downscale width before inference (matches the live pipeline).
-PROCESS_WIDTH: int = 1280
+PROCESS_WIDTH: int = int(PROCESS_WIDTH)
 # Cache TTL (seconds) before the report is recomputed.
 CACHE_TTL_SECONDS: float = 60.0
 
@@ -52,7 +56,8 @@ def resolve_source(site_id: str = "", video_path: str = "") -> str | int:
       1. an explicit ``video_path`` argument,
       2. the site's currently-running live pipeline source (the same video the
          dashboard is streaming right now),
-      3. the ``VIDEO_SOURCE`` env var (falling back to the demo clip).
+      3. the project's construction-site video (auto-discovered; env override
+         via ``VIDEO_SOURCE``).
     """
     if video_path:
         return video_path
@@ -67,7 +72,7 @@ def resolve_source(site_id: str = "", video_path: str = "") -> str | int:
         except Exception as exc:  # noqa: BLE001
             logger.debug("Could not read live pipeline source: %s", exc)
 
-    env = DEFAULT_VIDEO_SOURCE
+    env = default_video_source()
     if isinstance(env, str) and env.strip().isdigit():
         return int(env.strip())
     return env
@@ -83,7 +88,7 @@ def get_video_report(
     source = resolve_source(site_id=site_id, video_path=video_path)
     confidence = float(conf if conf is not None else DEFAULT_CONF)
 
-    key = (str(source), round(confidence, 3))
+    key = (str(source), round(confidence, 3), SAMPLE_INTERVAL, MAX_SAMPLES, PROCESS_WIDTH)
     now = time.monotonic()
 
     if not force:
@@ -139,6 +144,8 @@ def _compute_report(source: str | int, conf: float) -> Dict[str, Any]:
             "image_height": 0,
         },
         "frames_analyzed": 0,
+        "lighting_condition": "",
+        "frame_evidence": [],
         "error": "",
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
@@ -157,33 +164,27 @@ def _compute_report(source: str | int, conf: float) -> Dict[str, Any]:
         best_ppe_meta: Dict[str, Any] = {}
         best_person_count = 0
 
-        aggregated = {
-            "helmet": 0,
-            "vest": 0,
-            "other": 0,
-        }
         vehicle_max = 0
         workers_max = 0
         frames_done = 0
         frame_index = 0
+        bright_sum = 0.0
+        bright_count = 0
+        evidence: List[Dict] = []
 
-        while frames_done < MAX_SAMPLES:
-            ok, frame = capture.read()
-            if not ok or frame is None:
-                break
+        fps = float(capture.get(cv2.CAP_PROP_FPS) or 30.0)
+        total_frames = int(capture.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
 
-            if frame_index % SAMPLE_INTERVAL != 0:
-                frame_index += 1
-                continue
-            frame_index += 1
+        # Spread the fixed sample budget evenly across the WHOLE clip so late
+        # footage (e.g. workers arriving halfway through) is represented.
+        if total_frames > 0:
+            step = max(1, int(total_frames // MAX_SAMPLES))
+        else:
+            step = SAMPLE_INTERVAL
 
+        def _consume(frame, frame_index, scale):
+            nonlocal vehicle_max, workers_max
             work = frame
-            scale = 1.0
-            h, w = frame.shape[:2]
-            if w > PROCESS_WIDTH:
-                scale = PROCESS_WIDTH / w
-                work = cv2.resize(frame, (PROCESS_WIDTH, int(h * scale)))
-
             base_dets = base.detect_from_frame(work)
             persons = [d for d in base_dets if d.get("class_id") == 0]
             # Person anchors stay in the SAME (resized) coordinate space as
@@ -198,7 +199,7 @@ def _compute_report(source: str | int, conf: float) -> Dict[str, Any]:
 
             ppe_result = ppe.analyze_workers(work, person_detections=person_boxes)
 
-            # Recompute violations from per-worker real PPE attribution.
+            # Per-frame violations from per-worker real PPE attribution.
             helmet_v = sum(
                 1 for w in ppe_result.get("workers", [])
                 if "helmet" in (w.get("missing_ppe") or [])
@@ -215,12 +216,27 @@ def _compute_report(source: str | int, conf: float) -> Dict[str, Any]:
             person_count = len(ppe_result.get("workers", []))
             vehicle_count = sum(1 for d in base_dets if d.get("class_id") in (2, 5, 7, 8))
 
-            aggregated["helmet"] += helmet_v
-            aggregated["vest"] += vest_v
-            aggregated["other"] += other_v
             workers_max = max(workers_max, person_count)
             vehicle_max = max(vehicle_max, vehicle_count)
 
+            evidence.append({
+                "frame_index": frame_index,
+                "timestamp": round(frame_index / max(fps, 1.0), 2),
+                "detections": [
+                    {
+                        "label": d.get("label", "unknown"),
+                        "class_id": d.get("class_id"),
+                        "confidence": round(d.get("confidence", 0.0), 3),
+                        "bbox": [round(v / scale, 1) for v in d["bbox"]],
+                    }
+                    for d in base_dets
+                ],
+                "worker_count": person_count,
+                "vehicle_count": vehicle_count,
+                "violations": helmet_v + vest_v + other_v,
+            })
+
+            nonlocal best_person_count, best_frame_dets, best_workers, best_ppe_meta
             if person_count > best_person_count:
                 best_person_count = person_count
                 best_frame_dets = [
@@ -234,28 +250,73 @@ def _compute_report(source: str | int, conf: float) -> Dict[str, Any]:
                 ]
                 best_workers = list(ppe_result.get("workers", []))
                 best_ppe_meta = dict(ppe_result)
+            return person_count, vehicle_count
 
+        while frames_done < MAX_SAMPLES:
+            if total_frames > 0:
+                target = frames_done * step
+                capture.set(cv2.CAP_PROP_POS_FRAMES, target)
+                ok, frame = capture.read()
+                if not ok or frame is None:
+                    break
+                frame_index = target + 1
+            else:
+                ok, frame = capture.read()
+                if not ok or frame is None:
+                    break
+                if frame_index % SAMPLE_INTERVAL != 0:
+                    frame_index += 1
+                    continue
+                frame_index += 1
+
+            work = frame
+            scale = 1.0
+            h, w = frame.shape[:2]
+            if w > PROCESS_WIDTH:
+                scale = PROCESS_WIDTH / w
+                work = cv2.resize(frame, (PROCESS_WIDTH, int(h * scale)))
+
+            try:
+                bright_sum += float(cv2.mean(cv2.cvtColor(work, cv2.COLOR_BGR2GRAY))[0])
+                bright_count += 1
+            except Exception:  # noqa: BLE001
+                pass
+
+            _consume(work, frame_index, scale)
             frames_done += 1
 
-        total_frames = max(frames_done, 1)
+        # Top-level PPE metrics come from the SAME worker assessments the
+        # agents consume (best frame), so report compliance and per-worker PPE
+        # never contradict each other.
+        top_workers = list(best_workers)
         report["worker_count"] = workers_max
         report["vehicle_count"] = vehicle_max
-        report["helmet_violations"] = round(aggregated["helmet"] / total_frames)
-        report["vest_violations"] = round(aggregated["vest"] / total_frames)
-        report["other_violations"] = round(aggregated["other"] / total_frames)
+        report["helmet_violations"] = sum(
+            1 for w in top_workers if "helmet" in (w.get("missing_ppe") or [])
+        )
+        report["vest_violations"] = sum(
+            1 for w in top_workers if "vest" in (w.get("missing_ppe") or [])
+        )
+        report["other_violations"] = sum(
+            1 for w in top_workers
+            if w.get("missing_ppe")
+            and not any(x in (w.get("missing_ppe") or []) for x in ("helmet", "vest"))
+        )
         report["total_violations"] = (
             report["helmet_violations"]
             + report["vest_violations"]
             + report["other_violations"]
         )
-        if workers_max:
+        if top_workers:
             report["ppe_compliance"] = round(
-                (1.0 - report["total_violations"] / workers_max) * 100, 1
+                (1.0 - report["total_violations"] / len(top_workers)) * 100, 1
             )
         report["detected_objects"] = best_frame_dets
         report["ppe_workers"] = best_ppe_meta or report["ppe_workers"]
         report["frames_analyzed"] = frames_done
         report["model_used"] = best_ppe_meta.get("model_used", "yolov8n.pt")
+        report["lighting_condition"] = _lighting_from_brightness(bright_sum, bright_count)
+        report["frame_evidence"] = evidence
     except Exception as exc:  # noqa: BLE001
         logger.exception("Video analysis failed for source %s", source)
         report["error"] = str(exc)
@@ -291,3 +352,22 @@ def clear_cache() -> None:
     """Drop cached reports (e.g. when a new video is configured)."""
     with _report_lock:
         _report_cache.clear()
+
+
+def _lighting_from_brightness(bright_sum: float, bright_count: int) -> str:
+    """Derive a lighting-condition label from the mean frame brightness.
+
+    The value is computed from the sampled video frames themselves, so it is a
+    genuine observation from the footage, not an assumption. Brightness is the
+    mean grey level over a 0-255 scale.
+    """
+    if not bright_count:
+        return ""
+    mean = bright_sum / bright_count
+    if mean >= 110:
+        return "Good"
+    if mean >= 70:
+        return "Adequate"
+    if mean >= 40:
+        return "Poor"
+    return "Dark"
