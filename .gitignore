@@ -29,6 +29,9 @@ data/raw/**/*.pt
 # Downloaded ML model weights
 **/*.pt
 
+# YOLO training run artifacts (curves, results, labels, logs)
+ai/models/ppe_train/
+
 # Keep placeholder directories but not their contents by default
 data/raw/.gitkeep
 data/processed/.gitkeep

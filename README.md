@@ -3,10 +3,10 @@
 An agentic AI platform for real-time construction site risk monitoring, hazard
 detection, and explainable risk scoring.
 
-> **Milestone 1 implemented** — *Site Risk Monitoring & Hazard Detection*
+> **Milestones 1–2 implemented** — *Site Risk Monitoring & Hazard Detection*
+> and *Safety Agent / Worker Safety & PPE Compliance*
 >
-> **Milestones 2–4 planned** — *Safety Agent, Compliance Agent, Insurance Agent,
-> Reporting Agent*
+> **Milestones 3–4 planned** — *Compliance Agent, Insurance Agent, Reporting Agent*
 
 ---
 
@@ -28,14 +28,14 @@ actionable recommendations through a unique construction operations dashboard.
 ## 3. Agentic AI Architecture
 
 The full platform (per the project requirements) is composed of cooperating
-agents. **Only the Site Risk Agent is implemented in this milestone.**
+agents. **The Site Risk Agent and Safety Agent are implemented.**
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
 │                        Construction Risk Intelligence Engine        │
 ├─────────────────────────────────────────────────────────────────────┤
 │  Site Risk Agent  ◄── IMPLEMENTED (Milestone 1)                     │
-│  Safety Agent       (planned — Milestone 2)                         │
+│  Safety Agent     ◄── IMPLEMENTED (Milestone 2)                     │
 │  Compliance Agent   (planned — Milestone 3)                         │
 │  Insurance Agent    (planned — Milestone 3)                         │
 │  Reporting Agent    (planned — Milestone 4)                         │
@@ -55,6 +55,53 @@ backend/app/agents/site_risk_agent/
 └── recommendation_engine.py    # Actionable recommendations
 ```
 
+The **Safety Agent** monitors worker safety and PPE compliance (Milestone 2):
+
+```
+backend/app/agents/safety_agent/
+├── agent.py                        # Orchestrator (overall safety score 0-100)
+├── worker_safety_monitor.py        # Worker/equipment density risk
+├── unsafe_behavior_detector.py     # Swing-radius, overexertion detection
+├── accident_zone_analyzer.py       # High-risk zone ranking
+├── safety_hazard_detector.py       # Safety hazard identification
+├── safety_recommendation_engine.py # Corrective recommendations
+└── ppe_compliance.py               # PPE compliance scoring
+```
+
+Custom **PPE detection engine** (Milestone 2):
+
+```
+ai/computer_vision/ppe_detector.py  # Real YOLO PPE detector (Construction-PPE classes)
+                                    # Loaded once & cached; weights: ai/models/ppe.pt (PPE_MODEL_PATH)
+                                    # NO simulated fallback — reports clearly if unavailable
+```
+
+The PPE detector performs **real, image-dependent YOLO inference** on each
+uploaded image. Class labels come from the model's actual class table. Results
+depend on the actual uploaded image (different images → different detections).
+If the weights file is missing, the backend returns a clear "PPE model
+unavailable" response (no fabricated detections) and the frontend shows it.
+
+The workflow for an uploaded image:
+
+```
+User uploads construction image
+        ↓
+FastAPI receives actual image
+        ↓
+YOLO (base COCO) detection → real person/vehicle boxes
+        ↓
+PPE YOLO model inference → real PPE class boxes + confidence
+        ↓
+PPE compliance (bounding-box association: worker ↔ worn PPE / missing-* classes)
+        ↓
+Safety Agent (PPE 40% / worker 40% / accident 20%)
+        ↓
+Violations / alerts / safety score
+        ↓
+Frontend (image + bounding boxes, compliance, recommendations)
+```
+
 ## 4. Milestone 1 Scope
 
 | Deliverable | Status |
@@ -70,7 +117,31 @@ backend/app/agents/site_risk_agent/
 - ✅ Hazard detection functioning
 - ✅ Site risk dashboard available
 
-## 5. Input / Data Strategy
+## 5. Milestone 2 Scope — Safety Agent
+
+| Deliverable | Status |
+|---|---|
+| Safety Agent (worker safety orchestration) | ✅ Implemented |
+| Custom PPE detection (helmet / vest / gloves / goggles) | ✅ Implemented (real YOLO inference) |
+| Worker safety monitoring (density / swing-radius) | ✅ Implemented |
+| Accident-prone zone analysis | ✅ Implemented |
+| Safety hazard + recommendation engine | ✅ Implemented |
+| Safety alerts & violations | ✅ Implemented |
+| Safety analytics dashboard | ✅ Implemented |
+| Explainable overall safety score (0–100) | ✅ Implemented |
+
+**Safety scoring (weighted):** PPE compliance 40% / worker monitoring 40% /
+accident zones 20% → overall safety level (LOW < 25, MEDIUM < 50, HIGH < 75,
+CRITICAL ≥ 75).
+
+**New API endpoints (Milestone 2):**
+- `POST /sites/{id}/safety/analyze` — run the full Safety Agent for a site
+- `GET /sites/{id}/safety/dashboard` — safety analytics overview
+- `GET /sites/{id}/workers` — worker PPE register
+- `GET /sites/{id}/safety/violations` — list violations (`PATCH .../status` to update)
+- `GET /sites/{id}/safety/alerts` — safety alert feed
+
+## 6. Input / Data Strategy
 
 There is **no physical construction site** available. Therefore the system is
 built around:
@@ -84,7 +155,7 @@ Everything is explicitly labelled **Demo / Simulated Site Monitoring** in the UI
 and code. The architecture is designed so real CCTV, IoT sensors, and equipment
 telemetry can be connected later **without redesigning the Site Risk Agent**.
 
-## 6. Dataset / Video Processing
+## 7. Dataset / Video Processing
 
 The computer vision pipeline is modular:
 
@@ -118,11 +189,11 @@ ai/
 - Construction vehicles (trucks, excavators etc.)
 - Equipment operating areas
 
-> **PPE / helmet / vest detection is intentionally NOT implemented.** That is a
-> *Milestone 2 (Safety Agent)* feature. The detection architecture is preserved
-> so PPE detection can be plugged in later.
+> **PPE / helmet / vest detection is implemented in *Milestone 2 (Safety Agent)***
+> via `ai/computer_vision/ppe_detector.py`. Milestone 1 focuses on worker/vehicle
+> detection; the detection architecture is shared so both run on the same frames.
 
-## 7. Site Monitoring Event Model
+## 8. Site Monitoring Event Model
 
 Computer-vision detections and simulated monitoring are converted into
 structured **site monitoring events** (Pydantic models):
@@ -143,7 +214,7 @@ structured **site monitoring events** (Pydantic models):
 }
 ```
 
-## 8. Site Risk Agent
+## 9. Site Risk Agent
 
 Responsibilities (as defined by the requirements PDF):
 - Monitor construction site activities
@@ -154,7 +225,7 @@ Responsibilities (as defined by the requirements PDF):
 
 Implemented as a modular backend component in `backend/app/agents/site_risk_agent/`.
 
-## 9. Hazard Detection
+## 10. Hazard Detection
 
 Hazards are **derived from actual data** — never random. Sources include:
 - Computer vision detections (e.g. heavy equipment near workers)
@@ -177,7 +248,7 @@ Each hazard carries:
 | Recommended mitigation | "Restrict worker access around the active equipment operating zone" |
 | Status | detected / investigating / mitigated / resolved |
 
-## 10. Evidence
+## 11. Evidence
 
 **Every hazard includes an evidence/source field** so risk analysis is
 explainable. The dashboard shows **why** a hazard was detected.
@@ -187,7 +258,7 @@ Source: Computer Vision
 Evidence: "Excavator detected with 3 workers within monitored zone."
 ```
 
-## 11. Risk Scoring Methodology
+## 12. Risk Scoring Methodology
 
 An explainable **Site Risk Score from 0–100** is computed from weighted,
 data-derived components:
@@ -216,13 +287,13 @@ Environmental Risk (25%)
 The score is **deterministic and explainable** — every point is traceable to a
 contributing factor with evidence. No random numbers.
 
-## 12. Risk Trend
+## 13. Risk Trend
 
 Historical risk assessments are stored, enabling the dashboard to show whether
 risk is **increasing, stable, or decreasing** over time (e.g.
 `10:00 → 42, 10:05 → 48, 10:10 → 57`).
 
-## 13. Recommendation Engine
+## 14. Recommendation Engine
 
 Recommendations are generated from detected hazards / risk factors — not generic
 text. Example:
@@ -244,25 +315,25 @@ Components include:
 - Live monitoring feed
 - Equipment telemetry panel
 
-## 17. Monitoring Feed
+## 15. Monitoring Feed
 
 A live-looking stream fed by **real backend data** (not fabricated frontend
 animations), showing environmental updates, equipment detections, risk events,
 and recommendations.
 
-## 18. Dataset / Video Viewer
+## 16. Dataset / Video Viewer
 
 A dedicated page where the user can upload a construction image, run computer
 vision processing, and see detected objects, the generated monitoring event,
 and resulting risk analysis.
 
-## 19. Hazards Page
+## 17. Hazards Page
 
 A functional page listing hazards with **search** and filters by **severity**,
 **type**, and **zone**, showing evidence, recommendation, timestamp, and status
 (detected / investigating / mitigated / resolved) — all backed by APIs.
 
-## 20. Risk Analysis Page
+## 18. Risk Analysis Page
 
 Shows the overall risk plus each component score and explains **why** the score
 exists, e.g.:
@@ -274,7 +345,7 @@ Environmental Risk: 76 → Poor visibility, High wind
 Site Condition Risk: 70 → Wet ground
 ```
 
-## 21. Backend API
+## 19. Backend API
 
 FastAPI with Pydantic validation, HTTP status codes, error handling, service
 layers, and **Swagger/OpenAPI** at `/docs`.
@@ -304,7 +375,7 @@ layers, and **Swagger/OpenAPI** at `/docs`.
 | GET | `/api/demo/environmental` |
 | GET | `/api/demo/equipment` |
 
-## 22. Database
+## 20. Database
 
 SQLAlchemy ORM with SQLite (Milestone 1). Entities:
 
@@ -314,7 +385,7 @@ SQLAlchemy ORM with SQLite (Milestone 1). Entities:
 The schema is designed so future agents (Milestones 2–4) can be added as new
 tables / relationships without redesign.
 
-## 23. Data Flow
+## 21. Data Flow
 
 ```
 Dataset / Video → Data Ingestion → Computer Vision → Object/Activity Detection
@@ -323,16 +394,19 @@ Dataset / Video → Data Ingestion → Computer Vision → Object/Activity Detec
 → Database → FastAPI → React Dashboard
 ```
 
-## 24. Future Compatibility
+## 22. Future Compatibility
 
-Milestones 2–4 (Safety, Compliance, Insurance, Reporting agents) are **planned,
+Milestones 3–4 (Compliance, Insurance, Reporting agents) are **planned,
 not implemented**. The `agents/` directory is structured to accommodate them
-later, and the Site Risk Agent has no dependency on future agents.
+later, and the Site Risk / Safety agents have no dependency on future agents.
 
-## 25. PPE Detection — Deferred
+## 25. PPE Detection — Real YOLO Inference
 
-Intentionally **not implemented** in Milestone 1 (belongs to Milestone 2 /
-Safety Agent). The CV architecture is preserved for future PPE plug-in.
+PPE detection (Milestone 2) is implemented as a **real YOLO inference** engine
+in `ai/computer_vision/ppe_detector.py`, trained on the Construction-PPE
+dataset (11 classes: helmet, gloves, vest, boots, goggles, no_helmet,
+no_gloves, no_boots, no_goggle, Person, none). See the "PPE detection engine"
+section under Agentic AI Architecture for the full image-analysis flow.
 
 ## 26. Demo Mode
 
@@ -441,13 +515,17 @@ dataset is available, the demo image in `data/demo/` and uploads are used.
 
 ## 33. Current Limitations
 
-- Milestone 1 only (Site Risk Agent). Other agents are planned.
-- PPE / helmet / vest detection deferred to Milestone 2.
+- Milestones 1–2 implemented (Site Risk + Safety agents). Compliance / Insurance
+  / Reporting agents are planned.
+- Real PPE YOLO inference requires the trained weights at `ai/models/ppe.pt`
+  (or `PPE_MODEL_PATH`). If absent, PPE analysis reports "model unavailable"
+  and does not fabricate results; base COCO detection still works.
 - Simulated environmental and equipment data (clearly labelled), not live
-  sensors / CCTV.
+  sensors / CCTV. Simulated data is never used to replace real PPE inference on
+  an uploaded image.
 - Video processing uses frame sampling (not every frame) for performance.
-- Detection model is pre-trained YOLO (COCO classes); fine-tuning on a
-  construction dataset is a future enhancement.
+- Detection models are pre-trained YOLO; PPE model is fine-tuned on the
+  Construction-PPE dataset.
 
 ## 34. Future Milestones
 

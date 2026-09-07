@@ -25,7 +25,7 @@ def setup_db():
 def test_health():
     r = client.get("/api/health")
     assert r.status_code == 200
-    assert r.json()["milestone"] == 1
+    assert r.json()["milestone"] == 2
 
 
 def test_list_sites():
@@ -77,5 +77,52 @@ def test_risk_history():
 
 def test_hazards_empty():
     r = client.get("/api/sites/site_riverside_main/hazards")
+    assert r.status_code == 200
+    assert isinstance(r.json(), list)
+
+
+# ── Milestone 2 · Safety API ────────────────────────────────────────────────
+
+def test_safety_analysis():
+    r = client.post("/api/sites/site_riverside_main/safety/analyze")
+    assert r.status_code == 200
+    body = r.json()
+    assert "safety_assessment" in body
+    assert "overall_safety_level" in body["safety_assessment"]
+    assert body["safety_assessment"]["overall_safety_level"] in (
+        "LOW", "MEDIUM", "HIGH", "CRITICAL",
+    )
+    assert "ppe_compliance" in body
+
+
+def test_safety_dashboard():
+    r = client.get("/api/sites/site_riverside_main/safety/dashboard")
+    assert r.status_code == 200
+    body = r.json()
+    assert "total_workers" in body
+    assert "violations" in body
+    assert "alerts" in body
+    assert "compliant_workers" in body
+
+
+def test_safety_dashboard_unknown_site():
+    r = client.get("/api/sites/nonexistent/safety/dashboard")
+    assert r.status_code == 404
+
+
+def test_list_workers():
+    r = client.get("/api/sites/site_riverside_main/workers")
+    assert r.status_code == 200
+    assert isinstance(r.json(), list)
+
+
+def test_list_safety_violations():
+    r = client.get("/api/sites/site_riverside_main/safety/violations")
+    assert r.status_code == 200
+    assert isinstance(r.json(), list)
+
+
+def test_list_safety_alerts():
+    r = client.get("/api/sites/site_riverside_main/safety/alerts")
     assert r.status_code == 200
     assert isinstance(r.json(), list)
