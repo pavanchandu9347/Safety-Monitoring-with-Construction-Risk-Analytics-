@@ -530,3 +530,122 @@ class DemoDataGenerator:
                 "overall_risk_level": overall_risk,
             },
         }
+
+
+# ---------------------------------------------------------------------------
+# Worker Safety Simulator (Milestone 2)
+# ---------------------------------------------------------------------------
+
+WORKER_ROLES = ["worker", "operator", "supervisor"]
+PNPE_POOL = ["hardhat", "safety_vest", "gloves", "goggles"]
+
+
+class WorkerSafetySimulator:
+    """Deterministic simulator for worker PPE compliance data.
+
+    Generates a list of worker PPE assessments that mirror the output of the
+    custom-YOLO PPE detector, so the Safety Agent can be exercised without a
+    physical site. Every result is reproducible from the time seed.
+    """
+
+    def get_workers(self, dt: datetime | None = None) -> list[dict[str, Any]]:
+        dt = dt or datetime.now(timezone.utc)
+        seed = _seed_from_time("worker_safety", dt)
+
+        # Deterministic worker roster size between 6 and 12.
+        roster_size = 6 + (seed % 7)
+
+        workers: list[dict[str, Any]] = []
+        for i in range(roster_size):
+            wseed = seed + i
+            role = _pick(WORKER_ROLES, wseed)
+            # Deterministic non-compliance: every 3rd worker based on seed.
+            non_compliant = (i + seed) % 3 == 0
+            if non_compliant:
+                missing_pool = PNPE_POOL[:3]
+                missing = [_pick(missing_pool, wseed + 1)]
+            else:
+                missing = []
+
+            detected = [p for p in PNPE_POOL if p not in missing]
+            workers.append(
+                {
+                    "worker_id": f"WORKER-{i + 1:02d}",
+                    "worker_name": f"Worker {i + 1:02d}",
+                    "worker_role": role,
+                    "zone": None,
+                    "ppe_status": "non_compliant" if missing else "compliant",
+                    "detected_ppe": detected,
+                    "missing_ppe": missing,
+                    "confidence": round(0.8 + (wseed % 15) / 100, 3),
+                }
+            )
+        return workers
+
+
+class SafetyAlertGenerator:
+    """Deterministic generator for operator safety alerts (Milestone 2)."""
+
+    def generate(
+        self,
+        violations: list[dict[str, Any]],
+        ppe_compliance_rate: float,
+        overall_safety_level: str,
+    ) -> list[dict[str, Any]]:
+        alerts: list[dict[str, Any]] = []
+
+        open_violations = [v for v in violations if v.get("status") == "open"]
+        critical = [v for v in open_violations if v.get("severity") == "CRITICAL"]
+        high = [v for v in open_violations if v.get("severity") == "HIGH"]
+
+        if critical:
+            alerts.append({
+                "alert_type": "critical_ppe_violation",
+                "message": (
+                    f"CRITICAL: {len(critical)} worker(s) missing critical PPE "
+                    "— immediate supervisor intervention required."
+                ),
+                "severity": "CRITICAL",
+            })
+        elif high:
+            alerts.append({
+                "alert_type": "high_ppe_violation",
+                "message": (
+                    f"Warning: {len(high)} high-severity PPE violation(s) active. "
+                    "Review safety compliance in affected zones."
+                ),
+                "severity": "HIGH",
+            })
+
+        if ppe_compliance_rate < 0.8:
+            alerts.append({
+                "alert_type": "low_compliance",
+                "message": (
+                    f"Site-wide PPE compliance below 80% "
+                    f"({round(ppe_compliance_rate * 100)}%). Schedule safety briefing."
+                ),
+                "severity": "MEDIUM",
+            })
+
+        if overall_safety_level in ("HIGH", "CRITICAL"):
+            alerts.append({
+                "alert_type": "elevated_safety_risk",
+                "message": (
+                    f"Overall safety level {overall_safety_level}. "
+                    "Activate enhanced worker protection protocols."
+                ),
+                "severity": overall_safety_level,
+            })
+
+        # Escalation alert if multiple active violations.
+        if len(open_violations) >= 3:
+            alerts.append({
+                "alert_type": "escalation",
+                "message": (
+                    f"{len(open_violations)} open safety violations — escalate to "
+                    "site safety manager and schedule corrective action review."
+                ),
+                "severity": "HIGH",
+            })
+
+        return alerts

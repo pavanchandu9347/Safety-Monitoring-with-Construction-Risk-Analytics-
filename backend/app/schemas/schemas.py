@@ -234,3 +234,87 @@ class ImageAnalyzeRequest(BaseModel):
     site_id: str
     zone_id: Optional[str] = None
     image_path: str
+
+
+# ── Milestone 2 · Safety Intelligence ─────────────────────────────────────────
+
+class WorkerResponse(BaseModel):
+    id: str
+    site_id: str
+    name: str = ""
+    role: str = "worker"
+    zone_id: Optional[str] = None
+    ppe_status: str = "compliant"
+    missing_ppe: list[str] = []
+    detected_ppe: list[str] = []
+    is_present: int = 1
+    last_seen: Optional[datetime] = None
+    model_config = {"from_attributes": True}
+
+
+class SafetyViolationResponse(BaseModel):
+    id: str
+    site_id: str
+    zone_id: Optional[str] = None
+    worker_id: Optional[str] = None
+    violation_type: str
+    description: str = ""
+    severity: str = "LOW"
+    risk_contribution: float = 0.0
+    recommended_mitigation: str = ""
+    status: str = "open"
+    source: str = "ppe_detection"
+    timestamp: Optional[datetime] = None
+    resolved_at: Optional[datetime] = None
+    model_config = {"from_attributes": True}
+
+
+class SafetyAlertResponse(BaseModel):
+    id: str
+    site_id: str
+    zone_id: Optional[str] = None
+    alert_type: str
+    message: str = ""
+    severity: str = "LOW"
+    is_acknowledged: int = 0
+    timestamp: Optional[datetime] = None
+    model_config = {"from_attributes": True}
+
+
+class SafetyAssessmentResponse(BaseModel):
+    id: str
+    site_id: str
+    timestamp: Optional[datetime] = None
+    overall_safety_score: float = 0.0
+    overall_safety_level: str = "LOW"
+    ppe_score: float = 0.0
+    ppe_compliance_rate: float = 1.0
+    worker_safety_score: float = 0.0
+    worker_count: int = 0
+    accident_zone_score: float = 0.0
+    ppe_factors: list[str] = []
+    worker_factors: list[str] = []
+    accident_factors: list[str] = []
+    violation_count: int = 0
+    alert_count: int = 0
+    summary: str = ""
+    model_config = {"from_attributes": True}
+
+
+class SafetyDashboardResponse(BaseModel):
+    site_id: str
+    site_name: str
+    generated_at: datetime = Field(default_factory=datetime.utcnow)
+    current_safety_assessment: Optional[SafetyAssessmentResponse] = None
+    workers: list[WorkerResponse] = []
+    violations: list[SafetyViolationResponse] = []
+    alerts: list[SafetyAlertResponse] = []
+    accident_zone_data: list[dict] = []
+    unsafe_behavior_events: list[dict] = []
+    total_workers: int = 0
+    compliant_workers: int = 0
+    violation_count: int = 0
+    open_violations: int = 0
+    critical_alerts: int = 0
+    compliance_rate: float = 1.0
+    model_config = {"from_attributes": True}

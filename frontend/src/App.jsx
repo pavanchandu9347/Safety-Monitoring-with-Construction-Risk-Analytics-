@@ -5,6 +5,7 @@ import Monitoring from './pages/Monitoring'
 import Video from './pages/Video'
 import Hazards from './pages/Hazards'
 import Analysis from './pages/Analysis'
+import Safety from './pages/Safety'
 
 export default function App() {
   return (
@@ -15,6 +16,7 @@ export default function App() {
         <Route path="/video" element={<Video />} />
         <Route path="/hazards" element={<Hazards />} />
         <Route path="/analysis" element={<Analysis />} />
+        <Route path="/safety" element={<Safety />} />
       </Route>
     </Routes>
   )

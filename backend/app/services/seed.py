@@ -2,7 +2,11 @@
 
 from datetime import datetime, timezone
 from app.database.database import SessionLocal
-from app.models.models import Project, Site, Zone, Equipment, MonitoringEvent
+from app.models.models import (
+    Project, Site, Zone, Equipment, MonitoringEvent, Worker,
+    SafetyViolation, SafetyAlert, SafetyAssessment,
+)
+from app.services.simulated_data import WorkerSafetySimulator
 
 
 def seed_demo_data():
@@ -156,6 +160,23 @@ def seed_demo_data():
             timestamp=now,
         )
         db.add(event)
+
+        # ── Milestone 2 · Safety demo data ────────────────────────────────
+        worker_sim = WorkerSafetySimulator()
+        for w in worker_sim.get_workers(dt=now):
+            db.add(
+                Worker(
+                    id="wrk_" + w["worker_id"].replace("-", ""),
+                    site_id="site_riverside_main",
+                    name=w.get("worker_name", w["worker_id"]),
+                    role=w.get("worker_role", "worker"),
+                    ppe_status=w["ppe_status"],
+                    missing_ppe=w["missing_ppe"],
+                    detected_ppe=w["detected_ppe"],
+                    is_present=1,
+                    last_seen=now,
+                )
+            )
         db.commit()
     except Exception as e:
         db.rollback()

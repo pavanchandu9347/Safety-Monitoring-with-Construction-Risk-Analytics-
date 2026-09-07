@@ -20,6 +20,7 @@ const NAV = [
   { to: '/video', label: 'CV / DATASET', icon: Camera, code: '03' },
   { to: '/hazards', label: 'HAZARD LOG', icon: ShieldAlert, code: '04' },
   { to: '/analysis', label: 'RISK ANALYSIS', icon: Activity, code: '05' },
+  { to: '/safety', label: 'SAFETY CTL', icon: HardHat, code: '06' },
 ]
 
 export default function Layout() {
@@ -51,7 +52,7 @@ export default function Layout() {
           <div className="leading-tight">
             <div className="flex items-center gap-2">
               <span className="text-white font-black tracking-[0.2em] text-sm">SITE-RISK</span>
-              <span className="text-[9px] text-slate-500 readout border border-steel px-1 py-0.5">v1.0 · M1</span>
+              <span className="text-[9px] text-slate-500 readout border border-steel px-1 py-0.5">v2.0 · M2</span>
             </div>
             <div className="text-[9px] text-slate-500 readout tracking-[0.3em]">OPERATIONS CONTROL UNIT</div>
           </div>
@@ -106,8 +107,8 @@ export default function Layout() {
                   className={({ isActive }) =>
                     `group relative flex items-center gap-2.5 px-3 py-2.5 readout text-[11px] tracking-wider border-l-2 transition-colors ${
                       isActive
-                        ? 'border-hazard text-white bg-[#151b23]'
-                        : 'border-transparent text-slate-500 hover:text-slate-200 hover:bg-[#12171f]'
+                        ? 'border-hazard text-white bg-[#1b2431]'
+                        : 'border-steel-2 text-slate-400 hover:text-white hover:bg-[#1b2431]'
                     }`
                   }>
                   <span className="text-slate-600 group-hover:text-slate-500 text-[10px]">{code}</span>
@@ -138,9 +139,9 @@ export default function Layout() {
       <footer className="h-7 border-t border-steel bg-[#0e1218] flex items-center px-4 readout text-[10px] text-slate-500 gap-6">
         <span className="text-ok">● SYS ONLINE</span>
         <span className="text-slate-600">|</span>
-        <span>MILESTONE 1 · SITE RISK AGENT</span>
+        <span>MILESTONE 2 · SITE RISK + SAFETY AGENTS</span>
         <span className="text-slate-600">|</span>
-        <span>HAZARD ENGINE: READY</span>
+        <span>PPE ENGINE: READY</span>
         <span className="ml-auto text-slate-600">ACRIP-00 / RT 23:59:59</span>
       </footer>
     </div>

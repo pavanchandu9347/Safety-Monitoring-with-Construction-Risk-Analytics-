@@ -40,6 +40,10 @@ class Site(Base):
     hazards = relationship("Hazard", back_populates="site", cascade="all, delete-orphan")
     risk_assessments = relationship("RiskAssessment", back_populates="site", cascade="all, delete-orphan")
     equipment = relationship("Equipment", back_populates="site", cascade="all, delete-orphan")
+    workers = relationship("Worker", back_populates="site", cascade="all, delete-orphan")
+    safety_violations = relationship("SafetyViolation", back_populates="site", cascade="all, delete-orphan")
+    safety_alerts = relationship("SafetyAlert", back_populates="site", cascade="all, delete-orphan")
+    safety_assessments = relationship("SafetyAssessment", back_populates="site", cascade="all, delete-orphan")
 
 
 class Zone(Base):
@@ -168,3 +172,87 @@ class Equipment(Base):
     last_updated = Column(DateTime, default=datetime.utcnow)
 
     site = relationship("Site", back_populates="equipment")
+
+
+class Worker(Base):
+    """Worker record for safety monitoring (Milestone 2)."""
+
+    __tablename__ = "workers"
+
+    id = Column(String, primary_key=True, default=gen_uuid)
+    site_id = Column(String, ForeignKey("sites.id"), nullable=False)
+    name = Column(String, default="")
+    role = Column(String, default="worker")
+    zone_id = Column(String, ForeignKey("zones.id"), nullable=True)
+    ppe_status = Column(String, default="compliant")
+    missing_ppe = Column(JSON, default=list)
+    detected_ppe = Column(JSON, default=list)
+    is_present = Column(Integer, default=1)
+    last_seen = Column(DateTime, default=datetime.utcnow)
+
+    site = relationship("Site")
+    zone = relationship("Zone")
+
+
+class SafetyViolation(Base):
+    """A recorded PPE violation or unsafe behavior (Milestone 2)."""
+
+    __tablename__ = "safety_violations"
+
+    id = Column(String, primary_key=True, default=gen_uuid)
+    site_id = Column(String, ForeignKey("sites.id"), nullable=False)
+    zone_id = Column(String, ForeignKey("zones.id"), nullable=True)
+    worker_id = Column(String, ForeignKey("workers.id"), nullable=True)
+    violation_type = Column(String, nullable=False)
+    description = Column(Text, default="")
+    severity = Column(String, default="LOW")
+    risk_contribution = Column(Float, default=0.0)
+    recommended_mitigation = Column(Text, default="")
+    status = Column(String, default="open")
+    source = Column(String, default="ppe_detection")
+    timestamp = Column(DateTime, default=datetime.utcnow)
+    resolved_at = Column(DateTime, nullable=True)
+
+    site = relationship("Site")
+
+
+class SafetyAlert(Base):
+    """Generated safety alert for operators (Milestone 2)."""
+
+    __tablename__ = "safety_alerts"
+
+    id = Column(String, primary_key=True, default=gen_uuid)
+    site_id = Column(String, ForeignKey("sites.id"), nullable=False)
+    zone_id = Column(String, ForeignKey("zones.id"), nullable=True)
+    alert_type = Column(String, nullable=False)
+    message = Column(Text, default="")
+    severity = Column(String, default="LOW")
+    is_acknowledged = Column(Integer, default=0)
+    timestamp = Column(DateTime, default=datetime.utcnow)
+
+    site = relationship("Site")
+
+
+class SafetyAssessment(Base):
+    """A stored safety assessment result (Milestone 2)."""
+
+    __tablename__ = "safety_assessments"
+
+    id = Column(String, primary_key=True, default=gen_uuid)
+    site_id = Column(String, ForeignKey("sites.id"), nullable=False)
+    timestamp = Column(DateTime, default=datetime.utcnow)
+    overall_safety_score = Column(Float, default=0.0)
+    overall_safety_level = Column(String, default="LOW")
+    ppe_score = Column(Float, default=0.0)
+    ppe_compliance_rate = Column(Float, default=1.0)
+    worker_safety_score = Column(Float, default=0.0)
+    worker_count = Column(Integer, default=0)
+    accident_zone_score = Column(Float, default=0.0)
+    ppe_factors = Column(JSON, default=list)
+    worker_factors = Column(JSON, default=list)
+    accident_factors = Column(JSON, default=list)
+    violation_count = Column(Integer, default=0)
+    alert_count = Column(Integer, default=0)
+    summary = Column(Text, default="")
+
+    site = relationship("Site")
