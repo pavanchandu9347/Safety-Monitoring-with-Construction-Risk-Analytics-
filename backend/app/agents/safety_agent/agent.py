@@ -6,7 +6,7 @@ safety recommendation generation into a single explainable result.
 
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from app.agents.safety_agent.worker_safety_monitor import WorkerSafetyMonitor
 from app.agents.safety_agent.ppe_compliance import PPEDetector as PPEScorer
@@ -37,6 +37,7 @@ class SafetyAgent:
         site_conditions: Dict,
         zone_data: List[Dict],
         ppe_source: str = "ppe_detection",
+        video_accident_zones: Optional[Dict] = None,
     ) -> Dict:
         # 1. PPE compliance scoring.
         ppe_result = self.ppe_scorer.analyze(worker_ppe)
@@ -49,8 +50,13 @@ class SafetyAgent:
             equipment_data, detected_objects, zone_data, unsafe_events
         )
 
-        # 3. Accident-prone zone analysis.
-        zone_result = self.accident_zones.analyze(zone_data, equipment_data)
+        # 3. Accident-prone zone analysis. When the video pipeline produced
+        # spatial evidence (real detections grouped into frame regions), that is
+        # the authoritative source; otherwise fall back to declared zones.
+        if video_accident_zones is not None:
+            zone_result = video_accident_zones
+        else:
+            zone_result = self.accident_zones.analyze(zone_data, equipment_data)
 
         # 4. Safety hazards (PPE violations + unsafe behavior).
         safety_hazards = self.hazard_detector.analyze(
@@ -77,15 +83,22 @@ class SafetyAgent:
         summary = (
             f"PPE compliance is {round(ppe_result['compliance_rate']*100)}% "
             f"({ppe_result['compliant_count']} of {ppe_result['workers_assessed']} "
-            "workers compliant). "
+            "workers assessed). "
             f"{len(safety_hazards)} safety hazard(s) identified. "
             f"Highest accident-risk zone: "
             f"{zone_result.get('top_accident_zone', {}).get('zone_name', 'N/A')}."
         )
 
+        evidence_available = bool(
+            ppe_result.get("assessed", False)
+            or worker_result.get("evidence_available", False)
+            or zone_result.get("overall_accident_risk", {}).get("evidence_available", False)
+        )
+
         return {
             "overall_safety_score": overall["score"],
             "overall_safety_level": overall["risk_level"],
+            "evidence_available": evidence_available,
             "summary": summary,
             "ppe_compliance": ppe_result,
             "worker_safety": worker_result,

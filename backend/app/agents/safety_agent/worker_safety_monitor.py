@@ -62,12 +62,24 @@ class WorkerSafetyMonitor:
             factors.append(f"{len(high_zones)} high-risk zones active")
 
         score = min(score, 100.0)
+        evidence_available = (
+            worker_count > 0
+            or total_near > 0
+            or unsafe_count > 0
+            or bool(high_zones)
+            or bool(critical_zones)
+        )
+        if not evidence_available:
+            factors.append(
+                "No worker-safety evidence recoverable from current video frames"
+            )
         return {
             "score": round(score, 2),
             "risk_level": self._level(score),
             "factors": factors,
             "worker_count": worker_count,
             "workers_near_equipment": total_near,
+            "evidence_available": evidence_available,
         }
 
     @staticmethod

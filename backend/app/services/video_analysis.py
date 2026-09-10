@@ -31,6 +31,134 @@ from app.config import (
 
 logger = logging.getLogger(__name__)
 
+
+def _box_key(box: List[float]) -> str:
+    return f"{float(box[0]):.1f},{float(box[1]):.1f},{float(box[2]):.1f},{float(box[3]):.1f}"
+
+
+class _WorkerTracker:
+    """Lightweight IoU-based association of person detections across frames.
+
+    Sample frames can be seconds apart, so matching uses a generous overlap
+    floor plus a centre-distance guard. A worker reappearing after a long gap
+    (larger than ``_MAX_REASSOC_FRAMES`` sampled frames) is treated as a new
+    observation — honest behaviour rather than a fabricated identity.
+    """
+
+    _MAX_REASSOC = 4  # max sampled-frames gap before a worker is considered new
+
+    def __init__(self) -> None:
+        self._workers: Dict[str, Dict[str, Any]] = {}
+
+    def observe(self, worker: Dict[str, Any], frame_index: int, fps: float) -> str:
+        box = worker.get("bbox")
+        if not box or len(box) < 4:
+            return ""
+        box = [float(v) for v in box[:4]]
+        best_id: Optional[str] = None
+        best_iou = 0.0
+        for wid, rec in self._workers.items():
+            gap = frame_index - rec["last_frame"]
+            if (gap / max(fps, 1.0)) > 3.0:
+                continue
+            iou = self._iou(box, rec["last_box"])
+            if iou > best_iou:
+                best_iou = iou
+                best_id = wid
+
+        if best_id is not None and best_iou >= 0.12:
+            rec = self._workers[best_id]
+        else:
+            best_id = f"w-{len(self._workers) + 1}"
+            rec = {
+                "worker_id": best_id,
+                "first_frame": frame_index,
+                "last_frame": frame_index,
+                "frames_seen": 0,
+                "ppe_samples": [],
+                "detected_ppe": set(),
+                "missing_ppe": set(),
+                "last_box": box,
+                "bbox": box,
+                "confidence": worker.get("confidence", 0.0),
+            }
+            self._workers[best_id] = rec
+
+        rec["frames_seen"] += 1
+        rec["last_frame"] = frame_index
+        rec["last_box"] = box
+        rec["bbox"] = box
+        rec["confidence"] = max(float(rec.get("confidence") or 0.0), float(worker.get("confidence") or 0.0))
+        status = worker.get("ppe_status", "insufficient_evidence")
+        rec["ppe_samples"].append(status)
+        rec["detected_ppe"].update(worker.get("detected_ppe", []))
+        rec["missing_ppe"].update(worker.get("missing_ppe", []))
+        return best_id
+
+    def observe_many(
+        self, workers: List[Dict[str, Any]], frame_index: int, fps: float
+    ) -> Dict[str, str]:
+        """Associate every worker in a frame with its tracked id (by bbox)."""
+        assigned: Dict[str, str] = {}
+        for wrk in workers:
+            box = wrk.get("bbox")
+            if not box or len(box) < 4:
+                continue
+            box = [float(v) for v in box[:4]]
+            best_id = ""
+            best_iou = 0.0
+            for wid, rec in self._workers.items():
+                if rec["last_frame"] != frame_index:
+                    continue
+                iou = self._iou(box, rec["last_box"])
+                if iou > best_iou:
+                    best_iou = iou
+                    best_id = wid
+            if best_iou >= 0.12:
+                assigned[_box_key(box)] = best_id
+                continue
+            # Not seen this frame yet — run the regular association.
+            clone = dict(wrk)
+            assigned[_box_key(box)] = self.observe(clone, frame_index, fps)
+        return assigned
+
+    @staticmethod
+    def _iou(a: List[float], b: List[float]) -> float:
+        ax1, ay1, ax2, ay2 = a
+        bx1, by1, bx2, by2 = b
+        ix1, iy1, ix2, iy2 = max(ax1, bx1), max(ay1, by1), min(ax2, bx2), min(ay2, by2)
+        inter = max(0.0, ix2 - ix1) * max(0.0, iy2 - iy1)
+        if inter <= 0.0:
+            return 0.0
+        uni = (ax2 - ax1) * (ay2 - ay1) + (bx2 - bx1) * (by2 - by1) - inter
+        return inter / uni if uni > 0 else 0.0
+
+    def final_workers(self, fps: float, scale: float = 1.0) -> List[Dict[str, Any]]:
+        final: List[Dict[str, Any]] = []
+        for i, rec in enumerate(self._workers.values(), start=1):
+            samples = rec["ppe_samples"]
+            if "non_compliant" in samples:
+                status = "non_compliant"
+            elif "compliant" in samples:
+                status = "compliant"
+            else:
+                status = "insufficient_evidence"
+            final.append({
+                "worker_id": rec["worker_id"],
+                "worker_role": "worker",
+                "first_frame": rec["first_frame"],
+                "last_frame": rec["last_frame"],
+                "frames_seen": rec["frames_seen"],
+                "first_seen": round(rec["first_frame"] / max(fps, 1.0), 2),
+                "last_seen": round(rec["last_frame"] / max(fps, 1.0), 2),
+                "ppe_status": status,
+                "detected_ppe": sorted(rec["detected_ppe"]),
+                "missing_ppe": sorted(rec["missing_ppe"]),
+                "confidence": round(float(rec.get("confidence") or 0.0), 3),
+                "bbox": [round(float(v) / scale, 1) for v in rec["bbox"]],
+            })
+        return final
+
 # The default video source is resolved to the construction-site video present in
 # the project folder (env-driven via VIDEO_SOURCE). If several videos exist the
 # caller passes an explicit path; the frontend exposes a selector.
@@ -171,6 +299,10 @@ def _compute_report(source: str | int, conf: float) -> Dict[str, Any]:
         bright_sum = 0.0
         bright_count = 0
         evidence: List[Dict] = []
+        tracker = _WorkerTracker()
+        video_w = 0.0
+        video_h = 0.0
+        last_scale = 1.0
 
         fps = float(capture.get(cv2.CAP_PROP_FPS) or 30.0)
         total_frames = int(capture.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
@@ -183,8 +315,12 @@ def _compute_report(source: str | int, conf: float) -> Dict[str, Any]:
             step = SAMPLE_INTERVAL
 
         def _consume(frame, frame_index, scale):
-            nonlocal vehicle_max, workers_max
+            nonlocal vehicle_max, workers_max, video_w, video_h, last_scale
+            last_scale = float(scale) if scale else 1.0
             work = frame
+            h, w = work.shape[:2]
+            video_w = float(w / scale) if scale else float(w)
+            video_h = float(h / scale) if scale else float(h)
             base_dets = base.detect_from_frame(work)
             persons = [d for d in base_dets if d.get("class_id") == 0]
             # Person anchors stay in the SAME (resized) coordinate space as
@@ -199,42 +335,47 @@ def _compute_report(source: str | int, conf: float) -> Dict[str, Any]:
 
             ppe_result = ppe.analyze_workers(work, person_detections=person_boxes)
 
-            # Per-frame violations from per-worker real PPE attribution.
-            helmet_v = sum(
-                1 for w in ppe_result.get("workers", [])
-                if "helmet" in (w.get("missing_ppe") or [])
-            )
-            vest_v = sum(
-                1 for w in ppe_result.get("workers", [])
-                if "vest" in (w.get("missing_ppe") or [])
-            )
-            other_v = sum(
-                1 for w in ppe_result.get("workers", [])
-                if w.get("missing_ppe")
-                and not any(x in (w.get("missing_ppe") or []) for x in ("helmet", "vest"))
-            )
-            person_count = len(ppe_result.get("workers", []))
-            vehicle_count = sum(1 for d in base_dets if d.get("class_id") in (2, 5, 7, 8))
+            # Associate this frame's workers into tracked identities, then stamp
+            # the stable tracked id on the per-frame evidence for coherence.
+            assigned = tracker.observe_many(ppe_result.get("workers", []), frame_index, fps)
 
-            workers_max = max(workers_max, person_count)
-            vehicle_max = max(vehicle_max, vehicle_count)
-
+            # Persist per-frame evidence for downstream agents / UI.
             evidence.append({
-                "frame_index": frame_index,
+                "frame_number": frame_index,
                 "timestamp": round(frame_index / max(fps, 1.0), 2),
                 "detections": [
                     {
                         "label": d.get("label", "unknown"),
+                        "class_name": d.get("label", "unknown"),
                         "class_id": d.get("class_id"),
                         "confidence": round(d.get("confidence", 0.0), 3),
                         "bbox": [round(v / scale, 1) for v in d["bbox"]],
                     }
                     for d in base_dets
                 ],
-                "worker_count": person_count,
-                "vehicle_count": vehicle_count,
-                "violations": helmet_v + vest_v + other_v,
+                "workers": [
+                    {
+                        "worker_id": assigned.get(_box_key(w3.get("bbox") or []), w3.get("worker_id")),
+                        "ppe_status": w3.get("ppe_status"),
+                        "bbox": [round(v / scale, 1) for v in (w3.get("bbox") or [])],
+                        "confidence": w3.get("confidence"),
+                    }
+                    for w3 in ppe_result.get("workers", [])
+                ],
+                "worker_count": len(ppe_result.get("workers", [])),
+                "vehicle_count": sum(1 for d in base_dets if d.get("class_id") in (2, 5, 7, 8)),
+                "violations": sum(
+                    1 for w2 in ppe_result.get("workers", [])
+                    if w2.get("ppe_status") == "non_compliant"
+                ),
             })
+
+            # The observe_many above already registered these workers.
+            person_count = len(ppe_result.get("workers", []))
+            vehicle_count = sum(1 for d in base_dets if d.get("class_id") in (2, 5, 7, 8))
+
+            workers_max = max(workers_max, person_count)
+            vehicle_max = max(vehicle_max, vehicle_count)
 
             nonlocal best_person_count, best_frame_dets, best_workers, best_ppe_meta
             if person_count > best_person_count:
@@ -285,21 +426,29 @@ def _compute_report(source: str | int, conf: float) -> Dict[str, Any]:
             _consume(work, frame_index, scale)
             frames_done += 1
 
-        # Top-level PPE metrics come from the SAME worker assessments the
-        # agents consume (best frame), so report compliance and per-worker PPE
+        # Top-level PPE metrics come from the SAME tracked worker assessments the
+        # downstream agents consume, so report compliance and per-worker PPE
         # never contradict each other.
-        top_workers = list(best_workers)
-        report["worker_count"] = workers_max
+        tracked_workers = tracker.final_workers(fps, last_scale)
+        top_workers = tracked_workers
+        report["worker_count"] = len(tracked_workers)  # distinct tracked workers
+        report["worker_peak"] = workers_max             # max concurrent in a frame
         report["vehicle_count"] = vehicle_max
+        report["workers"] = tracked_workers
         report["helmet_violations"] = sum(
-            1 for w in top_workers if "helmet" in (w.get("missing_ppe") or [])
+            1 for w in top_workers
+            if w.get("ppe_status") == "non_compliant"
+            and "helmet" in (w.get("missing_ppe") or [])
         )
         report["vest_violations"] = sum(
-            1 for w in top_workers if "vest" in (w.get("missing_ppe") or [])
+            1 for w in top_workers
+            if w.get("ppe_status") == "non_compliant"
+            and "vest" in (w.get("missing_ppe") or [])
         )
         report["other_violations"] = sum(
             1 for w in top_workers
-            if w.get("missing_ppe")
+            if w.get("ppe_status") == "non_compliant"
+            and w.get("missing_ppe")
             and not any(x in (w.get("missing_ppe") or []) for x in ("helmet", "vest"))
         )
         report["total_violations"] = (
@@ -307,16 +456,47 @@ def _compute_report(source: str | int, conf: float) -> Dict[str, Any]:
             + report["vest_violations"]
             + report["other_violations"]
         )
-        if top_workers:
-            report["ppe_compliance"] = round(
-                (1.0 - report["total_violations"] / len(top_workers)) * 100, 1
-            )
+        compliant = sum(1 for w in top_workers if w.get("ppe_status") == "compliant")
+        conclusive = sum(
+            1 for w in top_workers
+            if w.get("ppe_status") in ("compliant", "non_compliant")
+        )
+        if conclusive:
+            report["ppe_compliance"] = round((compliant / conclusive) * 100, 1)
         report["detected_objects"] = best_frame_dets
-        report["ppe_workers"] = best_ppe_meta or report["ppe_workers"]
+        report["ppe_workers"] = {
+            "workers": top_workers,
+            "model_used": best_ppe_meta.get("model_used", "yolov8n.pt"),
+            "compliant_count": compliant,
+            "non_compliant_count": conclusive - compliant,
+            "insufficient_evidence_count": len(top_workers) - conclusive,
+            "conclusive_count": conclusive,
+            "compliance_rate": round(compliant / conclusive, 3) if conclusive else 1.0,
+            "total_workers": len(top_workers),
+            "image_width": round(video_w),
+            "image_height": round(video_h),
+        }
         report["frames_analyzed"] = frames_done
         report["model_used"] = best_ppe_meta.get("model_used", "yolov8n.pt")
         report["lighting_condition"] = _lighting_from_brightness(bright_sum, bright_count)
         report["frame_evidence"] = evidence
+
+        # Accident zones derived from ACTUAL spatial detections in the frames.
+        try:
+            from app.agents.safety_agent.accident_zone_analyzer import AccidentZoneAnalyzer
+
+            report["accident_zones"] = AccidentZoneAnalyzer().analyze_from_video(
+                evidence, video_w, video_h
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Accident-zone analysis skipped: %s", exc)
+            report["accident_zones"] = {
+                "available": False,
+                "note": "Accident-zone analysis could not be completed.",
+                "zones": [],
+                "top_accident_zone": None,
+                "overall_accident_risk": {"score": 0.0, "risk_level": "LOW", "evidence_available": False},
+            }
     except Exception as exc:  # noqa: BLE001
         logger.exception("Video analysis failed for source %s", source)
         report["error"] = str(exc)

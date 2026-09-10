@@ -46,6 +46,10 @@ CONFIDENCE_THRESHOLD: float = float(
 # Optional explicit default video path. When empty the project folder is scanned.
 DEFAULT_VIDEO_SOURCE: str = os.environ.get("VIDEO_SOURCE", "").strip()
 
+# The primary construction-site input video (base name, extension-insensitive).
+# Contruction_vid is the single source of truth for the current data run.
+PRIMARY_VIDEO_STEM: str = os.environ.get("PRIMARY_VIDEO_STEM", "contruction_vid").strip().lower()
+
 # Reserved directories to skip while discovering videos in the project folder.
 _SKIP_DIRS = frozenset(
     {"node_modules", ".git", "venv", "data", "__pycache__", ".venv", "dist", "build"}
@@ -105,15 +109,36 @@ def discover_videos() -> list[dict]:
     return [dict(v) for v in found]
 
 
-def default_video_source() -> str:
-    """The single unambiguous default video for the site.
+def _stem_key(path: str) -> str:
+    """Lowercased file stem (e.g. ``site3.mov`` → ``site3``)."""
+    return Path(path).stem.lower()
 
-    Priority: explicit ``VIDEO_SOURCE`` env, otherwise the project video if
-    exactly one exists in the project folder, otherwise ``""``.
+
+def default_video_source() -> str:
+    """The single unambiguous primary video for the site.
+
+    Priority:
+      1. explicit ``VIDEO_SOURCE`` env,
+      2. the project's primary video (``PRIMARY_VIDEO_STEM``, default
+         ``contruction_vid``) anywhere in the discovered set — root-level copies
+         win over upload copies,
+      3. the project video if exactly one exists,
+      4. otherwise ``""``.
     """
     if DEFAULT_VIDEO_SOURCE:
         return DEFAULT_VIDEO_SOURCE
+
     videos = discover_videos()
+    if not videos:
+        return ""
+
+    primary = [v for v in videos if _stem_key(v["path"]) == PRIMARY_VIDEO_STEM]
+    if primary:
+        # Prefer the repository-root copy (the canonical primary input) over
+        # copies under the upload/storage folder.
+        root_hits = [v for v in primary if Path(v["path"]).parent == REPO_ROOT]
+        return (root_hits[0] if root_hits else primary[0])["path"]
+
     if len(videos) == 1:
         return videos[0]["path"]
     return ""

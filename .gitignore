@@ -36,6 +36,9 @@ ai/models/ppe_train/
 data/raw/.gitkeep
 data/processed/.gitkeep
 
+# Upload/storage video copies (operational data, too large for git)
+backend/data/
+
 # Root-level construction videos (operational data, too large for git)
 /*.mp4
 /*.mkv

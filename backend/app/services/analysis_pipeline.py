@@ -297,6 +297,7 @@ def run_analysis(
             site_conditions=site_conditions,
             zone_data=zone_data,
             ppe_source="ppe_detection",
+            video_accident_zones=report.get("accident_zones"),
         )
 
         # ── Persist evidence, all tagged with the SAME analysis_id ─────────
@@ -551,6 +552,7 @@ def run_analysis(
             "lighting_condition": lighting,
             "evidence_note": evidence_note,
             "frame_evidence": report.get("frame_evidence", []),
+            "accident_zones": report.get("accident_zones", {}),
         }
 
         db.commit()
@@ -674,8 +676,12 @@ def build_analysis_response(
             "evidence_note",
             "Environmental dimensions not available from current video evidence.",
         ),
+        "accident_zones": evidence.get("accident_zones", {}),
         "detected_objects": analysis.detected_objects,
-        "frame_evidence": evidence.get("frame_evidence", []),
+        "frame_evidence": [
+            dict(f, analysis_id=analysis.id)
+            for f in evidence.get("frame_evidence", [])
+        ],
         "worker_count": analysis.worker_count,
         "vehicle_count": analysis.vehicle_count,
         "ppe": {
@@ -697,10 +703,11 @@ def build_analysis_response(
             }
             for e in equipment
         ],
-        "workers": [
-            {
-                "id": w.id,
-                "name": w.name,
+"workers": [
+        {
+            "id": w.id,
+            "analysis_id": w.analysis_id,
+            "name": w.name,
                 "role": w.role,
                 "ppe_status": w.ppe_status,
                 "missing_ppe": w.missing_ppe,
@@ -729,6 +736,7 @@ def build_analysis_response(
         compliant = sum(1 for w in workers if w.ppe_status == "compliant")
         non_compliant = sum(1 for w in workers if w.ppe_status != "compliant")
         payload["safety"] = {
+            "evidence_available": len(workers) > 0,
             "overall_safety_score": safety.overall_safety_score,
             "overall_safety_level": safety.overall_safety_level,
             "ppe_score": safety.ppe_score,
@@ -769,6 +777,7 @@ def build_analysis_response(
     payload["hazards"] = [
         {
             "id": h.id,
+            "analysis_id": h.analysis_id,
             "hazard_type": h.hazard_type,
             "description": h.description,
             "severity": h.severity,
@@ -783,6 +792,7 @@ def build_analysis_response(
     payload["recommendations"] = [
         {
             "id": r.id,
+            "analysis_id": r.analysis_id,
             "title": r.title,
             "description": r.description,
             "priority": r.priority,
@@ -794,6 +804,7 @@ def build_analysis_response(
     payload["violations"] = [
         {
             "id": v.id,
+            "analysis_id": v.analysis_id,
             "violation_type": v.violation_type,
             "description": v.description,
             "severity": v.severity,
@@ -806,6 +817,7 @@ def build_analysis_response(
     payload["alerts"] = [
         {
             "id": a.id,
+            "analysis_id": a.analysis_id,
             "alert_type": a.alert_type,
             "message": a.message,
             "severity": a.severity,
@@ -816,6 +828,7 @@ def build_analysis_response(
     payload["events"] = [
         {
             "id": e.id,
+            "analysis_id": e.analysis_id,
             "event_type": e.event_type,
             "source": e.source,
             "description": e.description,

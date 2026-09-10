@@ -297,7 +297,15 @@ class PPEDetector:
                 for item, miss_name in MISSING_MAP.items()
                 if miss_name in overlap_missing and item not in detected
             )
-            compliant = not missing and not detected_flag_violation(detected, missing)
+            if missing:
+                compliant = False
+            elif not detected:
+                # A worker with no worn-PPE box AND no missing-* box cannot be
+                # scored confidently. Prefer an honest "insufficient evidence"
+                # state over inventing a violation OR a compliance pass.
+                compliant = None
+            else:
+                compliant = not detected_flag_violation(detected, missing)
             severity = "LOW"
             if missing:
                 severity = "HIGH" if any(m in ("helmet", "vest") for m in missing) else "MEDIUM"
@@ -305,11 +313,16 @@ class PPEDetector:
                 {
                     "worker_id": f"W-{idx}",
                     "worker_role": _infer_role(person),
-                    "ppe_status": "compliant" if compliant else "non_compliant",
+                    "ppe_status": (
+                        "compliant" if compliant
+                        else "non_compliant" if compliant is False
+                        else "insufficient_evidence"
+                    ),
                     "detected_ppe": sorted(detected),
                     "missing_ppe": missing,
                     "confidence": round(person["confidence"], 3),
-                    "violation": not compliant,
+                    "bbox": [round(float(v), 1) for v in person["bbox"]],
+                    "violation": compliant is False,
                     "severity": severity,
                 }
             )

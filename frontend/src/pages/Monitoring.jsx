@@ -9,25 +9,23 @@ export default function Monitoring() {
   const siteId = useSite()
   const [events, setEvents] = useState([])
   const [equipment, setEquipment] = useState([])
-  const [environmental, setEnvironmental] = useState(null)
   const [latest, setLatest] = useState(null)
   const [running, setRunning] = useState(false)
   const [detail, setDetail] = useState(null)
   const feedRef = useRef(null)
 
   const load = async () => {
-    try {
-      const [evRes, eqRes, envRes, latestRes] = await Promise.all([
-        api.getMonitoring(siteId),
-        api.getEquipmentDemo(),
-        api.getEnvironmentalDemo('excavation'),
-        api.getLatestVideoAnalysis(siteId),
-      ])
-      setEvents(evRes.data || [])
-      setEquipment(eqRes.data || [])
-      setEnvironmental(envRes.data || null)
-      if (latestRes.data?.status === 'completed') setLatest(latestRes.data)
-    } catch {}
+    const [evRes, eqRes, envRes, latestRes] = await Promise.allSettled([
+      api.getMonitoring(siteId),
+      api.getEquipmentDemo(),
+      api.getEnvironmentalDemo('excavation'),
+      api.getLatestVideoAnalysis(siteId),
+    ])
+    if (evRes.status === 'fulfilled') setEvents(evRes.value.data || [])
+    if (eqRes.status === 'fulfilled') setEquipment(eqRes.value.data?.equipment || [])
+    if (latestRes.status === 'fulfilled' && latestRes.value.data?.status === 'completed') {
+      setLatest(latestRes.value.data)
+    }
   }
   useEffect(() => { load() }, [siteId])
   useEffect(() => { if (feedRef.current) feedRef.current.scrollTop = feedRef.current.scrollHeight }, [events])
@@ -37,17 +35,20 @@ export default function Monitoring() {
     try { await api.analyzeVideo(siteId); await load() } finally { setRunning(false) }
   }
 
+  // Environmental cells come from the latest REAL video analysis. Every value
+  // here is derived from actual frame evidence; dimensions the video cannot
+  // support (weather/temp/wind/ground) are shown as "Unavailable", never
+  // fabricated.
   const envCells = latest?.video ? {
-    'LIGHTING': latest.video.lighting_condition,
+    'LIGHTING': latest.video.lighting_condition || 'Unavailable',
     'FRAMES': `${latest.video.frames_analyzed ?? 0} @ ${latest.video.frame_interval ?? 0}f`,
     'WORKERS': `${latest.worker_count ?? 0} DETECTED`,
     'VEHICLES': `${latest.vehicle_count ?? 0} DETECTED`,
-  } : (environmental ? {
-    'LIGHTING': environmental.lighting_condition,
-    'WEATHER': environmental.weather,
-    'VISIBILITY': environmental.visibility,
-    'GROUND': environmental.ground_condition,
-  } : {})
+    'WEATHER': 'Unavailable',
+    'TEMP': 'Unavailable',
+    'WIND': 'Unavailable',
+    'GROUND': 'Unavailable',
+  } : {}
 
   const envList = Object.entries(envCells)
 

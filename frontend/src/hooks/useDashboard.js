@@ -89,6 +89,7 @@ export function useDashboard(refreshMs = 10000) {
       setLive((p) => ({ ...p, status: p.status === 'STOPPED' ? 'STOPPED' : p.status }))
     }
     ws.onmessage = (e) => {
+      if (e.data === '__pong__') return
       try { applySnapshot(JSON.parse(e.data)) } catch { /* ignore malformed */ }
     }
     ws.onclose = () => {
