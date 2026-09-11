@@ -33,6 +33,52 @@ def _env_int(name: str, default: int) -> int:
         return default
 
 
+def _env_float(name: str, default: float) -> float:
+    try:
+        return float(os.environ.get(name, default))
+    except (TypeError, ValueError):
+        return default
+
+
+# ── Authentication & session security ─────────────────────────────────────────
+# In production JWT_SECRET_KEY MUST be set in the environment. A per-process
+# random secret is only used so the platform boots without one; every restart
+# then invalidates previously issued tokens (safe default, not a persistent
+# secret). Tests override this variable explicitly.
+JWT_SECRET_KEY: str = os.environ.get("JWT_SECRET_KEY", "") or os.urandom(32).hex()
+JWT_ALGORITHM: str = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES: int = _env_int("ACCESS_TOKEN_EXPIRE_MINUTES", 480)
+
+# ── Demo manager bootstrap (placeholder credentials, never real secrets) ──────
+# If unset a random password is generated and logged at startup so the seeded
+# manager account is never created with a known, hardcoded password.
+DEFAULT_MANAGER_EMAIL: str = os.environ.get("DEFAULT_MANAGER_EMAIL", "manager@buildsure.io").strip()
+DEFAULT_MANAGER_PASSWORD: str = os.environ.get("DEFAULT_MANAGER_PASSWORD", "")
+
+# ── Evidence-based risk-alert notification policy ─────────────────────────────
+# A notification is only generated when the risk/safety scores reach these
+# thresholds or a HIGH/CRITICAL condition is directly detected. Defaults mirror
+# the project's 0-100 scoring bands: HIGH starts at 50, CRITICAL at 75. Raise
+# the thresholds to 75 to restrict alerts to CRITICAL-only.
+RISK_ALERT_THRESHOLD: float = _env_float("RISK_ALERT_THRESHOLD", 50.0)
+SAFETY_ALERT_THRESHOLD: float = _env_float("SAFETY_ALERT_THRESHOLD", 50.0)
+# Minimum severity that triggers an EXTERNAL channel (email). MEDIUM and below
+# stay in-app only.
+EMAIL_ALERT_MIN_LEVEL: str = os.environ.get("EMAIL_ALERT_MIN_LEVEL", "HIGH").upper()
+# Cooldown (seconds) before a repeated notification for the same underlying
+# condition is sent again. A severity escalation bypasses the cooldown.
+NOTIFICATION_COOLDOWN_SECONDS: int = _env_int("NOTIFICATION_COOLDOWN_SECONDS", 300)
+
+# ── External notification channel: SMTP email ─────────────────────────────────
+# Only used when fully configured; otherwise in-app notifications still work and
+# a clear message is logged. Credentials are never hardcoded.
+SMTP_HOST: str = os.environ.get("SMTP_HOST", "").strip()
+SMTP_PORT: int = _env_int("SMTP_PORT", 587)
+SMTP_USERNAME: str = os.environ.get("SMTP_USERNAME", "")
+SMTP_PASSWORD: str = os.environ.get("SMTP_PASSWORD", "")
+NOTIFICATION_EMAIL_FROM: str = os.environ.get("NOTIFICATION_EMAIL_FROM", "").strip()
+
+
 # Number of video frames to skip between analysis samples (~2fps at 30fps video).
 FRAME_SAMPLE_RATE: int = _env_int("FRAME_SAMPLE_RATE", 15)
 # Maximum number of sampled frames analyzed per video pass.

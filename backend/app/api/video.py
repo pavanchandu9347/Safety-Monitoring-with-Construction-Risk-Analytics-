@@ -22,7 +22,8 @@ from sqlalchemy.orm import Session
 
 from app.config import default_video_source, discover_videos
 from app.database.database import get_db
-from app.models.models import VideoAnalysis, Site
+from app.models.models import VideoAnalysis, Site, Manager
+from app.auth.deps import require_auth, authorize_site
 from app.services.analysis_pipeline import (
     build_analysis_response,
     get_latest_analysis,
@@ -61,9 +62,11 @@ def analyze_video(
     conf: float = Form(0.0),
     file: UploadFile | None = File(None),
     db: Session = Depends(get_db),
+    manager: Manager = Depends(require_auth),
 ):
     """Analyze exactly one video. Pass either an uploaded ``file`` or a
     ``video_path`` (from GET /video/source). Produces a new ``analysis_id``."""
+    authorize_site(manager, site_id)
     site = db.query(Site).filter(Site.id == site_id).first()
     if not site:
         raise HTTPException(status_code=404, detail="Site not found")
@@ -89,10 +92,11 @@ def analyze_video(
 
 
 @router.get("/video/analysis/{analysis_id}")
-def get_analysis(analysis_id: str, db: Session = Depends(get_db)):
+def get_analysis(analysis_id: str, db: Session = Depends(get_db), manager: Manager = Depends(require_auth)):
     analysis = db.query(VideoAnalysis).filter(VideoAnalysis.id == analysis_id).first()
     if not analysis:
         raise HTTPException(status_code=404, detail="Analysis not found")
+    authorize_site(manager, analysis.site_id)
     return build_analysis_response(db, analysis)
 
 

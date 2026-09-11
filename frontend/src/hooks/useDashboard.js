@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
 import { api } from '../services/api'
+import { useAuth } from '../contexts/AuthContext'
 
-const SITE_ID = 'site_riverside_main'
+const DEFAULT_SITE_ID = 'site_riverside_main'
 
 // Map live risk_level back onto the existing threshold mapping is not needed:
 // the backend already returns LOW/MEDIUM/HIGH/CRITICAL.
 
 export function useDashboard(refreshMs = 10000) {
+  const siteId = useSite()
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -81,7 +83,7 @@ export function useDashboard(refreshMs = 10000) {
 
   const connect = () => {
     if (!aliveRef.current) return
-    const ws = new WebSocket(api.liveWsUrl(SITE_ID))
+    const ws = new WebSocket(api.liveWsUrl(siteId))
     wsRef.current = ws
 
     ws.onopen = () => {
@@ -105,7 +107,7 @@ export function useDashboard(refreshMs = 10000) {
   const load = async (silent = false) => {
     if (!silent) setLoading(true)
     try {
-      const res = await api.getDashboard(SITE_ID)
+      const res = await api.getDashboard(siteId)
       setData(res.data)
       setError(null)
     } catch (e) {
@@ -119,7 +121,8 @@ export function useDashboard(refreshMs = 10000) {
     load()
     const id = setInterval(() => load(true), refreshMs)
     return () => clearInterval(id)
-  }, [refreshMs])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refreshMs, siteId])
 
   // One WebSocket connection, reconnecting, cleaned up on unmount.
   useEffect(() => {
@@ -131,14 +134,14 @@ export function useDashboard(refreshMs = 10000) {
       wsRef.current = null
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [siteId])
 
   // REST fallback poll of live/status so the live panel still updates even when
   // the WebSocket connection is unavailable (e.g. a WS-less server/backend).
   useEffect(() => {
     const poll = async () => {
       try {
-        const res = await api.getLiveStatus(SITE_ID)
+        const res = await api.getLiveStatus(siteId)
         applySnapshot(res.data)
       } catch { /* WS or next poll will pick up */ }
     }
@@ -146,12 +149,12 @@ export function useDashboard(refreshMs = 10000) {
     const id = setInterval(poll, 4000)
     return () => clearInterval(id)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [siteId])
 
   const startLive = async () => {
     setLive((p) => ({ ...p, status: 'STARTING' }))
     try {
-      const res = await api.startLive(SITE_ID)
+      const res = await api.startLive(siteId)
       setLive((p) => ({ ...p, status: res.data?.status || p.status, detail: res.data?.detail || '' }))
     } catch (e) {
       setLive((p) => ({ ...p, status: 'ERROR', detail: e.response?.data?.detail || e.message }))
@@ -160,7 +163,7 @@ export function useDashboard(refreshMs = 10000) {
 
   const stopLive = async () => {
     try {
-      const res = await api.stopLive(SITE_ID)
+      const res = await api.stopLive(siteId)
       setLive((p) => ({ ...p, status: res.data?.status || 'STOPPED', detail: res.data?.detail || '' }))
     } catch (e) {
       setLive((p) => ({ ...p, status: 'ERROR', detail: e.response?.data?.detail || e.message }))
@@ -180,5 +183,6 @@ export function useDashboard(refreshMs = 10000) {
 }
 
 export function useSite() {
-  return SITE_ID
+  const auth = useAuth()
+  return auth?.manager?.site_id || DEFAULT_SITE_ID
 }

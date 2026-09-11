@@ -318,3 +318,140 @@ class SafetyDashboardResponse(BaseModel):
     critical_alerts: int = 0
     compliance_rate: float = 1.0
     model_config = {"from_attributes": True}
+
+
+# ── Milestone 3 · Compliance & Insurance Intelligence ─────────────────────────
+
+class ComplianceRequirementResponse(BaseModel):
+    id: str
+    site_id: str
+    category: str = ""
+    requirement: str = ""
+    description: str = ""
+    source: str = ""
+    severity: str = "MEDIUM"
+    model_config = {"from_attributes": True}
+
+
+class ComplianceFindingResponse(BaseModel):
+    id: str
+    site_id: str
+    analysis_id: Optional[str] = None
+    requirement_id: Optional[str] = None
+    category: str = ""
+    requirement: str = ""
+    description: str = ""
+    status: str = "NOT_VERIFIED"
+    severity: str = "MEDIUM"
+    source: str = ""
+    evidence: str = ""
+    evidence_meta: dict[str, Any] = {}
+    timestamp: Optional[datetime] = None
+    model_config = {"from_attributes": True}
+
+
+class InspectionRecordResponse(BaseModel):
+    id: str
+    site_id: str
+    inspection_type: str = ""
+    description: str = ""
+    due_date: Optional[datetime] = None
+    last_inspection: Optional[datetime] = None
+    status: str = "NOT_AVAILABLE"
+    evidence: str = ""
+    model_config = {"from_attributes": True}
+
+
+class ComplianceAssessmentResponse(BaseModel):
+    id: str
+    site_id: str
+    analysis_id: Optional[str] = None
+    timestamp: Optional[datetime] = None
+    overall_score: Optional[float] = None
+    compliance_level: str = "INSUFFICIENT_EVIDENCE"
+    requirements_checked: int = 0
+    compliant_count: int = 0
+    non_compliant_count: int = 0
+    not_verified_count: int = 0
+    open_violations: int = 0
+    category_scores: dict[str, Any] = {}
+    summary: str = ""
+    model_config = {"from_attributes": True}
+
+
+class ComplianceDashboardResponse(BaseModel):
+    site_id: str
+    site_name: str
+    generated_at: datetime = Field(default_factory=datetime.utcnow)
+    current_assessment: Optional[ComplianceAssessmentResponse] = None
+    requirements: list[ComplianceRequirementResponse] = []
+    findings: list[ComplianceFindingResponse] = []
+    inspections: list[InspectionRecordResponse] = []
+    policy_violations: list[dict] = []
+    recommendations: list[dict] = []
+    unavailable_evidence: list[dict] = []
+    total_requirements: int = 0
+    compliant: int = 0
+    non_compliant: int = 0
+    not_verified: int = 0
+    overdue_inspections: int = 0
+    model_config = {"from_attributes": True}
+
+
+class InsuranceIncidentResponse(BaseModel):
+    id: str
+    site_id: str
+    analysis_id: Optional[str] = None
+    incident_type: str = ""
+    description: str = ""
+    severity: str = "LOW"
+    timestamp: Optional[datetime] = None
+    workers_involved: list[dict] = []
+    hazards: list[dict] = []
+    violations: list[dict] = []
+    evidence: list[dict] = []
+    claim_risk: str = ""
+    model_config = {"from_attributes": True}
+
+
+class ClaimRecordResponse(BaseModel):
+    id: str
+    site_id: str
+    analysis_id: Optional[str] = None
+    incident_id: Optional[str] = None
+    status: str = "DRAFTED"
+    claim_summary: str = ""
+    documentation: list[dict] = []
+    created_at: Optional[datetime] = None
+    model_config = {"from_attributes": True}
+
+
+class InsuranceAssessmentResponse(BaseModel):
+    id: str
+    site_id: str
+    analysis_id: Optional[str] = None
+    timestamp: Optional[datetime] = None
+    risk_score: float = 0.0
+    risk_level: str = "LOW"
+    open_incidents: int = 0
+    incident_severity: str = "LOW"
+    exposure: dict[str, Any] = {}
+    claim_risk: dict[str, Any] = {}
+    factors: list[str] = []
+    summary: str = ""
+    model_config = {"from_attributes": True}
+
+
+class InsuranceDashboardResponse(BaseModel):
+    site_id: str
+    site_name: str
+    generated_at: datetime = Field(default_factory=datetime.utcnow)
+    current_assessment: Optional[InsuranceAssessmentResponse] = None
+    incidents: list[InsuranceIncidentResponse] = []
+    claim_records: list[ClaimRecordResponse] = []
+    claim_documentation: dict[str, Any] = {}
+    recommendations: list[dict] = []
+    incident_count: int = 0
+    open_incidents: int = 0
+    open_claims: int = 0
+    model_config = {"from_attributes": True}

@@ -9,7 +9,8 @@ from sqlalchemy.orm import Session
 from datetime import datetime, timezone
 
 from app.database.database import get_db
-from app.models.models import MonitoringEvent, Site, Zone
+from app.models.models import MonitoringEvent, Site, Zone, Manager
+from app.auth.deps import require_auth, authorize_site
 from app.schemas.schemas import MonitoringEventCreate, MonitoringEventResponse
 from app.services.analysis_pipeline import run_analysis, get_latest_analysis, build_analysis_response
 from ai.computer_vision.detector import ConstructionSiteDetector
@@ -31,8 +32,9 @@ def list_monitoring_events(site_id: str, limit: int = 50, db: Session = Depends(
 
 
 @router.post("/monitoring/analyze", response_model=MonitoringEventResponse)
-def create_monitoring_event(data: MonitoringEventCreate, db: Session = Depends(get_db)):
+def create_monitoring_event(data: MonitoringEventCreate, db: Session = Depends(get_db), manager: Manager = Depends(require_auth)):
     import uuid
+    authorize_site(manager, data.site_id)
     event = MonitoringEvent(id=str(uuid.uuid4()), **data.model_dump())
     db.add(event)
     db.commit()

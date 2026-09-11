@@ -5,8 +5,15 @@ seeded: they are produced solely by the unified video-analysis pipeline.
 
 from app.database.database import SessionLocal
 from app.models.models import (
-    Project, Site, Zone,
+    Project, Site, Zone, Manager,
 )
+from app.auth.security import hash_password
+from app.config import DEFAULT_MANAGER_EMAIL, DEFAULT_MANAGER_PASSWORD
+import logging
+import os
+import secrets
+
+logger = logging.getLogger(__name__)
 
 
 def seed_demo_data():
@@ -14,6 +21,9 @@ def seed_demo_data():
     try:
         existing = db.query(Project).first()
         if existing:
+            # Scaffold already present; only (idempotent) manager seeding remains.
+            seed_manager(db)
+            db.commit()
             return
 
         project = Project(
@@ -64,9 +74,51 @@ def seed_demo_data():
             ),
         ]
         db.add_all(zones)
+
+        seed_manager(db)
         db.commit()
     except Exception as e:
         db.rollback()
         print(f"Seed data error: {e}")
     finally:
         db.close()
+
+
+def seed_manager(db):
+    """Create the demo manager account if one does not already exist.
+
+    Credentials come from the environment (``DEFAULT_MANAGER_EMAIL`` /
+    ``DEFAULT_MANAGER_PASSWORD``). If no password is configured a cryptographically
+    random one is generated and logged ONCE at startup — the account is never
+    created with a known/hardcoded password.
+    """
+    email = DEFAULT_MANAGER_EMAIL.lower()
+    existing = db.query(Manager).filter(Manager.email == email).first()
+    if existing:
+        return
+
+    password = DEFAULT_MANAGER_PASSWORD or None
+    if not password:
+        password = secrets.token_urlsafe(12)
+        logger.warning(
+            "DEFAULT_MANAGER_PASSWORD not set — demo manager '%s' created with "
+            "random password '%s' (set it in backend/.env to use a custom one).",
+            email, password,
+        )
+    elif password.strip() == "CHANGE-ME-PLEASE":
+        logger.warning(
+            "Demo manager '%s' uses the placeholder password from .env.example; "
+            "set DEFAULT_MANAGER_PASSWORD in backend/.env to a real value "
+            "before deploying.", email,
+        )
+
+    db.add(Manager(
+        id=os.getenv("DEFAULT_MANAGER_ID", "manager_riverside_001"),
+        name=os.getenv("DEFAULT_MANAGER_NAME", "Riverside Site Manager"),
+        email=email,
+        password_hash=hash_password(password),
+        role="manager",
+        site_id="site_riverside_main",
+        is_active=1,
+    ))
+    logger.info("Seeded demo manager account: %s", email)

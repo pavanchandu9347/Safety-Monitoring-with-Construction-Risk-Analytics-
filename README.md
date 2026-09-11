@@ -1,12 +1,22 @@
-# Agentic Construction Risk Intelligence Platform
+# BuildSure — Construction Risk Intelligence Platform
 
 An agentic AI platform for real-time construction site risk monitoring, hazard
 detection, and explainable risk scoring.
 
-> **Milestones 1–2 implemented** — *Site Risk Monitoring & Hazard Detection*
-> and *Safety Agent / Worker Safety & PPE Compliance*
+> **Milestones 1–4 implemented** — *Site Risk Monitoring & Hazard Detection*,
+> *Safety Agent / Worker Safety & PPE Compliance*,
+> *Compliance Agent + Insurance Agent* (regulatory validation, inspection status,
+> insurance risk exposure & claim documentation), and
+> **Manager Authentication + Smart Risk Alerts** (JWT-based site authorization,
+> evidence-based notification pipeline, bell UI with WebSocket push).
 >
-> **Milestones 3–4 planned** — *Compliance Agent, Insurance Agent, Reporting Agent*
+> **Milestone 5 planned** — *Reporting Agent*
+
+---
+
+> **Evidence policy:** agents only render verdicts from **real verified evidence**.
+> Missing documentation / video evidence yields `NOT_VERIFIED` /
+> `NOT_AVAILABLE` / `INSUFFICIENT_EVIDENCE` — no data is ever fabricated.
 
 ---
 
@@ -28,7 +38,8 @@ actionable recommendations through a unique construction operations dashboard.
 ## 3. Agentic AI Architecture
 
 The full platform (per the project requirements) is composed of cooperating
-agents. **The Site Risk Agent and Safety Agent are implemented.**
+agents. **The Site Risk Agent, Safety Agent, Compliance Agent, and Insurance
+Agent are implemented.**
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
@@ -36,9 +47,10 @@ agents. **The Site Risk Agent and Safety Agent are implemented.**
 ├─────────────────────────────────────────────────────────────────────┤
 │  Site Risk Agent  ◄── IMPLEMENTED (Milestone 1)                     │
 │  Safety Agent     ◄── IMPLEMENTED (Milestone 2)                     │
-│  Compliance Agent   (planned — Milestone 3)                         │
-│  Insurance Agent    (planned — Milestone 3)                         │
-│  Reporting Agent    (planned — Milestone 4)                         │
+│  Compliance Agent ◄── IMPLEMENTED (Milestone 3)                     │
+│  Insurance Agent  ◄── IMPLEMENTED (Milestone 3)                     │
+│  Manager Auth + Smart Risk Alerts ◄── IMPLEMENTED (Milestone 4)     │
+│  Reporting Agent    (planned — Milestone 5)                         │
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -66,6 +78,34 @@ backend/app/agents/safety_agent/
 ├── safety_hazard_detector.py       # Safety hazard identification
 ├── safety_recommendation_engine.py # Corrective recommendations
 └── ppe_compliance.py               # PPE compliance scoring
+```
+
+The **Compliance Agent** validates regulatory standards & inspections using only
+verified evidence (Milestone 3):
+
+```
+backend/app/agents/compliance_agent/
+├── agent.py                    # Orchestrator (inspection tracker → validate → score)
+├── standards_monitor.py        # Requirement ↔ live detection mapping
+├── regulatory_validator.py     # Evidence-only verdicts (NOT_VERIFIED when absent)
+├── policy_violation_detector.py# Policy violations from verified safety data
+├── inspection_tracker.py       # OVERDUE / DUE inspection status (datetime-aware)
+├── compliance_scorer.py        # Weighted score over VERIFIED verdicts only
+└── recommendation_engine.py    # Evidence-referenced corrective actions
+```
+
+The **Insurance Agent** derives incident risk, exposure, and claim documentation
+(Milestone 3):
+
+```
+backend/app/agents/insurance_agent/
+├── agent.py                    # Orchestrator (incidents → exposure → claims)
+├── incident_severity.py        # Multi-factor severity classification
+├── exposure_analyzer.py        # Worker / equipment / incident exposure tiers
+├── claim_risk_analyzer.py      # Explainable claim risk (ML-free factors)
+├── insurance_scorer.py         # Overall insurance risk score
+├── claim_documentation.py      # Claim docs only for verified incidents
+└── recommendation_engine.py    # Claim-response recommendations
 ```
 
 Custom **PPE detection engine** (Milestone 2):
@@ -140,6 +180,45 @@ CRITICAL ≥ 75).
 - `GET /sites/{id}/workers` — worker PPE register
 - `GET /sites/{id}/safety/violations` — list violations (`PATCH .../status` to update)
 - `GET /sites/{id}/safety/alerts` — safety alert feed
+
+## 5b. Milestone 3 Scope — Compliance & Insurance Intelligence
+
+Both agents run **inside the same unified analysis pipeline** as the Safety
+Agent (`run_analysis` in `backend/app/services/analysis_pipeline.py`): one video
+input → one shared `analysis_id` → Safety → Compliance → Insurance.
+
+| Deliverable | Status |
+|---|---|
+| Compliance Agent (regulatory validation) | ✅ Implemented |
+| Reference compliance requirements / baselines | ✅ 15 requirements · 8 categories |
+| Inspection tracker (DUE / OVERDUE, never fabricated) | ✅ Implemented |
+| Evidence-only verdicts (`NOT_VERIFIED` when unavailable) | ✅ Implemented |
+| Weighted compliance score over verified verdicts | ✅ Implemented |
+| Policy-violation identification | ✅ Real `SafetyViolation` rows |
+| Insurance Agent (incident & exposure intelligence) | ✅ Implemented |
+| Incident derivation (HIGH/CRITICAL hazards + CRITICAL alerts) | ✅ Implemented |
+| Multi-factor incident severity | ✅ Implemented |
+| Claim documentation (verified incidents only) | ✅ Implemented |
+| Compliance + Insurance dashboards (frontend) | ✅ Implemented |
+
+**Shared-analysis contract:** all Milestone‑3 rows persist with the same
+`analysis_id` as the Safety Assessment, so every verdict is traceable to the same
+video frames.
+
+> **Engineering decision:** because construction compliance / insurance
+> documentation (certificates, permits, completed inspections) is not observable
+> from video, the agents mark such items `NOT_VERIFIED` (reason: *"Required
+> documentation/evidence unavailable"*) and compute the compliance score over the
+> **verified** subset only — the platform never fabricates evidence of
+> compliance.
+
+**New API endpoints (Milestone 3):**
+- Compliance: `POST /sites/{id}/compliance/analyze`, `GET .../compliance/dashboard`,
+  `GET .../compliance/findings`, `GET .../compliance/requirements`,
+  `GET .../compliance/inspections`, `GET .../compliance/assessment`
+- Insurance: `POST /sites/{id}/insurance/analyze`, `GET .../insurance/dashboard`,
+  `GET .../insurance/incidents`, `GET .../insurance/claims`,
+  `GET .../insurance/assessment`
 
 ## 6. Input / Data Strategy
 
@@ -374,16 +453,41 @@ layers, and **Swagger/OpenAPI** at `/docs`.
 | GET | `/api/demo/scenario` |
 | GET | `/api/demo/environmental` |
 | GET | `/api/demo/equipment` |
+| POST | `/api/sites/{id}/compliance/analyze` |
+| GET | `/api/sites/{id}/compliance/dashboard` |
+| GET | `/api/sites/{id}/compliance/findings` |
+| GET | `/api/sites/{id}/compliance/requirements` |
+| GET | `/api/sites/{id}/compliance/inspections` |
+| GET | `/api/sites/{id}/compliance/assessment` |
+| POST | `/api/sites/{id}/insurance/analyze` |
+| GET | `/api/sites/{id}/insurance/dashboard` |
+| GET | `/api/sites/{id}/insurance/incidents` |
+| GET | `/api/sites/{id}/insurance/claims` |
+| GET | `/api/sites/{id}/insurance/assessment` |
+| POST | `/api/auth/login` |
+| GET | `/api/auth/me` |
+| POST | `/api/auth/logout` |
+| GET | `/api/notifications` |
+| GET | `/api/notifications/unread-count` |
+| PATCH | `/api/notifications/{id}/read` |
+| PATCH | `/api/notifications/read-all` |
+| DELETE | `/api/notifications/{id}` |
 
 ## 20. Database
 
-SQLAlchemy ORM with SQLite (Milestone 1). Entities:
+SQLAlchemy ORM with SQLite. Entities:
 
 `Project` → `Site` → `Zone`, plus `MonitoringEvent`, `Hazard`,
-`RiskAssessment`, `RiskFactor`, `Recommendation`, and `Equipment`.
-
-The schema is designed so future agents (Milestones 2–4) can be added as new
-tables / relationships without redesign.
+`RiskAssessment`, `RiskFactor`, `Recommendation`, `Equipment`
+(Milestone 1) and `SafetyViolation`, `SafetyAlert`, `WorkerRecord`,
+`SafetyAssessment` (Milestone 2). Milestone 3 adds `ComplianceRequirement`,
+`ComplianceFinding`, `InspectionRecord`, `ComplianceAssessment`,
+`InsuranceAssessment`, `InsuranceIncident`, and `ClaimRecord` — all share
+`site_id` / `analysis_id` so every agent verdict is traceable to the same
+video analysis. Milestone 4 adds `Manager` (name, email, password hash,
+role, site_id, token_version) and `Notification` (type, severity, title,
+message, source, evidence JSON, dedup_key, status, read_at, site_id,
+manager_id).
 
 ## 21. Data Flow
 
@@ -394,11 +498,61 @@ Dataset / Video → Data Ingestion → Computer Vision → Object/Activity Detec
 → Database → FastAPI → React Dashboard
 ```
 
-## 22. Future Compatibility
+## 22. Milestone 4 — Manager Auth & Smart Risk Alerts
 
-Milestones 3–4 (Compliance, Insurance, Reporting agents) are **planned,
-not implemented**. The `agents/` directory is structured to accommodate them
-later, and the Site Risk / Safety agents have no dependency on future agents.
+Milestone 4 delivers **manager authentication** and an **evidence-based risk
+alert pipeline** delivered in-app via WebSocket push.
+
+### 22.1 Manager Authentication
+
+- `Manager` records store role-scoped identities (e.g. site manager) linked to
+  a single `site_id`. Passwords are hashed with stdlib `hashlib.scrypt`
+  (format `scrypt$N$R$P$salt$digest`).
+- Login (`POST /api/auth/login`) issues an HS256 JWT (`PyJWT`) carrying the
+  manager id, role, site_id, and a `ver` claim bound to `token_version`. Logout
+  bumps `token_version`, invalidating every outstanding token server-side.
+- `require_site_access` enforces per-site authorization on every data route:
+  a manager can only read/write their own site (admins bypass). Media endpoints
+  (`?token=` query fallback) and the authenticated WebSocket (`live/video`,
+  `ws_live`) are covered too.
+
+### 22.2 Smart Risk Alerts
+
+- After every analysis, `evaluate_analysis()` turns **real persisted rows**
+  (SafetyAlert, SafetyViolation, Hazard, InsuranceIncident) plus the risk/safety
+  summaries into a severity-ranked notification. No fabricated data — evidence
+  is attached to every alert and "insufficient evidence" is reported explicitly.
+- **Policy:** severity is derived from the real level + score cross-check
+  (score ≥ 75 → CRITICAL, ≥ 50 → HIGH). Alerts below `RISK_ALERT_THRESHOLD`
+  are downgraded to MEDIUM (in-app only). Strongest condition wins via a
+  priority tuple (severity, score, specificity).
+- **Dedup / cooldown:** repeated occurrences of the same condition
+  (`dedup_key`) are suppressed within `NOTIFICATION_COOLDOWN_SECONDS` unless the
+  severity escalates (e.g. HIGH → CRITICAL bypasses the cooldown).
+- **Delivery:** notifications are pushed over the WebSocket hub in real time and
+  stored so the bell/badge and API inbox stay consistent. Severity ≥
+  `EMAIL_ALERT_MIN_LEVEL` messages are emailed when SMTP is configured; if
+  email/SMTP is unavailable the alert remains fully in-app.
+
+### 22.3 Live Site Alert
+
+The dashboard surfaces the strongest live alert (HTTP + WebSocket) as an
+"Active Risk Alert" banner with severity color, contributing factors, and risk
+score — the same evidence the notification was built from.
+
+### 22.4 Frontend
+
+Login page (`/login`), protected layout wrapper, axios Bearer interceptor with
+401 → redirect, notification bell with unread badge + dropdown (severity
+colors, time-ago, evidence count, mark-read / mark-all, navigate to source),
+and per-manager site scoping throughout.
+
+## 23. Future Compatibility
+
+The Reporting Agent (Milestone 5) is **planned, not implemented**. The `agents/`
+directory is structured so future agents can be added without redesign, no
+existing agent depends on it, and the Milestone 4 notification pipeline is
+designed to consume any future agent's verdicts.
 
 ## 25. PPE Detection — Real YOLO Inference
 
@@ -469,6 +623,11 @@ pip install -r requirements.txt
 python -m uvicorn app.main:app --host 0.0.0.0 --port 8001
 ```
 
+Set a persistent **JWT secret** (32+ random bytes) in `backend/.env`
+(`JWT_SECRET_KEY`) and optionally a known demo login via
+`DEFAULT_MANAGER_EMAIL` / `DEFAULT_MANAGER_PASSWORD`. If the password is left
+empty a cryptographically random one is generated and logged once at startup.
+
 ### Frontend
 ```bash
 cd frontend
@@ -485,12 +644,15 @@ docker-compose up --build
 
 1. Start the backend (port **8001**).
 2. Start the frontend (port **5179**).
-3. Open `http://localhost:5179` in a browser.
-4. The backend auto-seeds the demo Riverside Tower site on first run.
-5. Use the **Run Risk Analysis** / **Simulate Next Monitoring Tick** buttons to
-   generate monitoring events and risk assessments.
-6. Browse the Dashboard, Monitoring, Video, Hazards, and Risk Analysis pages.
-7. View API docs at `http://localhost:8001/docs`.
+3. Open `http://localhost:5179` in a browser — you'll land on the **login page**.
+4. Log in with the seeded manager credentials (see `DEFAULT_MANAGER_*` above).
+5. The backend auto-seeds the demo Riverside Tower site and demo manager on
+   first run.
+6. Use the **Run Risk Analysis** / **Simulate Next Monitoring Tick** buttons to
+   generate monitoring events and risk assessments — high-severity findings
+   surface immediately in the **notification bell**.
+7. Browse the Dashboard, Monitoring, Video, Hazards, and Risk Analysis pages.
+8. View API docs at `http://localhost:8001/docs`.
 
 > **Note on ports:** The default backend port is **8001** (port 8000 may be
 > occupied by other processes on some machines). The frontend Vite proxy points
@@ -515,11 +677,15 @@ dataset is available, the demo image in `data/demo/` and uploads are used.
 
 ## 33. Current Limitations
 
-- Milestones 1–2 implemented (Site Risk + Safety agents). Compliance / Insurance
-  / Reporting agents are planned.
+- Milestones 1–4 implemented (Site Risk, Safety, Compliance, Insurance agents,
+  Manager Auth & Smart Risk Alerts). The Reporting Agent (Milestone 5) is planned.
 - Real PPE YOLO inference requires the trained weights at `ai/models/ppe.pt`
   (or `PPE_MODEL_PATH`). If absent, PPE analysis reports "model unavailable"
   and does not fabricate results; base COCO detection still works.
+- Compliance / insurance documentation (certificates, permits, completed
+  inspection records) is not observable from video. Such items are reported
+  `NOT_VERIFIED` with an explicit "evidence unavailable" reason rather than
+  fabricated — scores are computed over the verified subset only.
 - Simulated environmental and equipment data (clearly labelled), not live
   sensors / CCTV. Simulated data is never used to replace real PPE inference on
   an uploaded image.
@@ -529,11 +695,10 @@ dataset is available, the demo image in `data/demo/` and uploads are used.
 
 ## 34. Future Milestones
 
-- **Milestone 2 — Safety Intelligence & Worker Protection** (PPE detection,
-  Safety Agent)
-- **Milestone 3 — Compliance & Insurance** (Compliance Agent, Insurance Agent)
-- **Milestone 4 — Reporting & Notifications** (Reporting Agent, Notification &
-  Workflow module)
+- **Milestone 5 — Reporting Agent** (PDF/PPTX report generation, compliance
+  reports, analytics dashboard)
+- Enhanced notification routing (e.g. Slack / per-role escalation), more
+  granular targeting, and multi-tenant manager roles.
 
 ---
 

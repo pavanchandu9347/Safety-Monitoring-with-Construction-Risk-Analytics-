@@ -2,7 +2,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.database.database import get_db
-from app.models.models import Hazard
+from app.models.models import Hazard, Manager
+from app.auth.deps import require_auth, authorize_site
 from app.schemas.schemas import HazardResponse
 
 router = APIRouter()
@@ -27,18 +28,20 @@ def list_hazards(
 
 
 @router.get("/hazards/{hazard_id}", response_model=HazardResponse)
-def get_hazard(hazard_id: str, db: Session = Depends(get_db)):
+def get_hazard(hazard_id: str, db: Session = Depends(get_db), manager: Manager = Depends(require_auth)):
     hazard = db.query(Hazard).filter(Hazard.id == hazard_id).first()
     if not hazard:
         raise HTTPException(status_code=404, detail="Hazard not found")
+    authorize_site(manager, hazard.site_id)
     return hazard
 
 
 @router.patch("/hazards/{hazard_id}/status")
-def update_hazard_status(hazard_id: str, new_status: str, db: Session = Depends(get_db)):
+def update_hazard_status(hazard_id: str, new_status: str, db: Session = Depends(get_db), manager: Manager = Depends(require_auth)):
     hazard = db.query(Hazard).filter(Hazard.id == hazard_id).first()
     if not hazard:
         raise HTTPException(status_code=404, detail="Hazard not found")
+    authorize_site(manager, hazard.site_id)
     if new_status not in ("detected", "investigating", "mitigated", "resolved"):
         raise HTTPException(status_code=400, detail="Invalid status")
     hazard.status = new_status

@@ -25,12 +25,15 @@ import logging
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", ".."))
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from app.live import pipeline as pipeline_mod
+from app.live.hub import NOTIFICATION_HUB
 from app.config import default_video_source
+from app.database.database import SessionLocal
+from app.auth.deps import ws_get_manager, authorize_site, require_site_access
 
 logger = logging.getLogger(__name__)
 
@@ -53,12 +56,12 @@ def _resolve_source(site_id: str, video_path: str = "") -> str | int:
     return source
 
 
-@router.get("/sites/{site_id}/live/status")
+@router.get("/sites/{site_id}/live/status", dependencies=[Depends(require_site_access)])
 def live_status(site_id: str):
     return pipeline_mod.manager.status(site_id)
 
 
-@router.post("/sites/{site_id}/live/start")
+@router.post("/sites/{site_id}/live/start", dependencies=[Depends(require_site_access)])
 def live_start(site_id: str, req: StartRequest | None = None):
     req = req or StartRequest()
     source = _resolve_source(site_id, req.video_path)
@@ -66,13 +69,28 @@ def live_start(site_id: str, req: StartRequest | None = None):
     return pipeline_mod.manager.start(site_id, source, conf=conf)
 
 
-@router.post("/sites/{site_id}/live/stop")
+@router.post("/sites/{site_id}/live/stop", dependencies=[Depends(require_site_access)])
 def live_stop(site_id: str):
     return pipeline_mod.manager.stop(site_id)
 
 
 @router.websocket("/ws/sites/{site_id}/live")
 async def ws_live(websocket: WebSocket, site_id: str):
+    token = websocket.query_params.get("token")
+    db = SessionLocal()
+    try:
+        manager = ws_get_manager(db, token)
+    finally:
+        db.close()
+    if manager is None:
+        await websocket.close(code=4401)
+        return
+    try:
+        authorize_site(manager, site_id)
+    except Exception:
+        await websocket.close(code=4403)
+        return
+
     await websocket.accept()
     pipe = pipeline_mod.manager.get(site_id)
     if pipe is None:
@@ -83,14 +101,24 @@ async def ws_live(websocket: WebSocket, site_id: str):
 
     q: queue.Queue = queue.Queue(maxsize=50)
     pipe.subscribe(q)
+    nq = NOTIFICATION_HUB.subscribe(site_id)
 
     try:
         while True:
             try:
-                snapshot = await asyncio.to_thread(q.get, True, 0.5)
+                snapshot = await asyncio.to_thread(q.get, True, 0.35)
+                await websocket.send_json(snapshot)
+                continue
             except queue.Empty:
-                # Fall through and re-send latest so the client knows the state.
-                snapshot = pipe.latest_snapshot or {"status": pipe.status}
+                pass
+            try:
+                event = await asyncio.to_thread(nq.get, True, 0.35)
+                await websocket.send_json(event)
+                continue
+            except queue.Empty:
+                pass
+            # Fall through and re-send latest so the client knows the state.
+            snapshot = pipe.latest_snapshot or {"status": pipe.status}
             try:
                 await websocket.send_json(snapshot)
             except Exception:  # noqa: BLE001
@@ -99,9 +127,10 @@ async def ws_live(websocket: WebSocket, site_id: str):
         pass
     finally:
         pipe.unsubscribe(q)
+        NOTIFICATION_HUB.unsubscribe(site_id, nq)
 
 
-@router.get("/sites/{site_id}/live/video")
+@router.get("/sites/{site_id}/live/video", dependencies=[Depends(require_site_access)])
 def live_video(site_id: str):
     pipe = pipeline_mod.manager.get(site_id)
 

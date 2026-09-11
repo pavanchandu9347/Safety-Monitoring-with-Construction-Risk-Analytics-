@@ -25,7 +25,7 @@ def setup_db():
 def test_health():
     r = client.get("/api/health")
     assert r.status_code == 200
-    assert r.json()["milestone"] == 2
+    assert r.json()["milestone"] == 4
 
 
 def test_list_sites():
@@ -35,8 +35,10 @@ def test_list_sites():
 
 
 def test_get_site_not_found():
+    # Site authorization layer rejects unknown sites with 403 (doesn't leak
+    # whether a site exists to an un-authorized manager).
     r = client.get("/api/sites/nonexistent")
-    assert r.status_code == 404
+    assert r.status_code == 403
 
 
 def test_dashboard_endpoint():
@@ -107,8 +109,9 @@ def test_safety_dashboard():
 
 
 def test_safety_dashboard_unknown_site():
+    # Same authorization-first behavior as test_get_site_not_found.
     r = client.get("/api/sites/nonexistent/safety/dashboard")
-    assert r.status_code == 404
+    assert r.status_code == 403
 
 
 def test_list_workers():

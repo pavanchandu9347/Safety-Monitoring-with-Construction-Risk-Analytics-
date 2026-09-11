@@ -4,6 +4,30 @@ const API = axios.create({
   baseURL: '/api',
 })
 
+// Attach the JWT to every request (Bearer header). Stream endpoints that
+// cannot send headers (MJPEG <img>) read the same token from the query string.
+API.interceptors.request.use((config) => {
+  const token = localStorage.getItem('buildsure_token')
+  if (token) config.headers.Authorization = `Bearer ${token}`
+  return config
+})
+
+// A 401 means the token is missing/expired/revoked: clear session state and
+// send the operator back to the login screen.
+API.interceptors.response.use(
+  (res) => res,
+  (err) => {
+    if (err?.response?.status === 401 && !err.config?.url?.startsWith('/auth/login')) {
+      localStorage.removeItem('buildsure_token')
+      localStorage.removeItem('buildsure_manager')
+      if (window.location.pathname !== '/login') {
+        window.location.assign('/login')
+      }
+    }
+    return Promise.reject(err)
+  }
+)
+
 export const api = {
   getDashboard: (siteId) => API.get(`/sites/${siteId}/dashboard`),
   getSites: () => API.get('/sites'),
@@ -61,15 +85,48 @@ export const api = {
   listSiteAnalyses: (siteId) => API.get(`/sites/${siteId}/video/analysis`),
   getLatestRiskAnalysis: (siteId) => API.get(`/sites/${siteId}/risk/latest`),
 
+  // ── Compliance Intelligence (M3) ──────────────────────────────────────
+  runComplianceAnalysis: (siteId) => API.post(`/sites/${siteId}/compliance/analyze`, {}, { timeout: 300000 }),
+  getComplianceDashboard: (siteId) => API.get(`/sites/${siteId}/compliance/dashboard`),
+  getComplianceFindings: (siteId) => API.get(`/sites/${siteId}/compliance/findings`),
+  getComplianceRequirements: (siteId) => API.get(`/sites/${siteId}/compliance/requirements`),
+  getComplianceInspections: (siteId) => API.get(`/sites/${siteId}/compliance/inspections`),
+  getComplianceAssessment: (siteId) => API.get(`/sites/${siteId}/compliance/assessment`),
+
+  // ── Insurance Intelligence (M3) ──────────────────────────────────────
+  runInsuranceAnalysis: (siteId) => API.post(`/sites/${siteId}/insurance/analyze`, {}, { timeout: 300000 }),
+  getInsuranceDashboard: (siteId) => API.get(`/sites/${siteId}/insurance/dashboard`),
+  getInsuranceIncidents: (siteId) => API.get(`/sites/${siteId}/insurance/incidents`),
+  getInsuranceClaims: (siteId) => API.get(`/sites/${siteId}/insurance/claims`),
+  getInsuranceAssessment: (siteId) => API.get(`/sites/${siteId}/insurance/assessment`),
+
   // ── Live video-analysis pipeline ────────────────────────────────────
   getLiveStatus: (siteId) => API.get(`/sites/${siteId}/live/status`),
   startLive: (siteId, body = {}) => API.post(`/sites/${siteId}/live/start`, body),
   stopLive: (siteId) => API.post(`/sites/${siteId}/live/stop`),
-  liveVideoUrl: (siteId) => `/api/sites/${siteId}/live/video`,
-  liveWsUrl: (siteId) => {
-    const proto = window.location.protocol === 'https:' ? 'wss' : 'ws'
-    return `${proto}://${window.location.host}/api/ws/sites/${siteId}/live`
+  liveVideoUrl: (siteId) => {
+    const token = localStorage.getItem('buildsure_token') || ''
+    const q = token ? `?token=${encodeURIComponent(token)}` : ''
+    return `/api/sites/${siteId}/live/video${q}`
   },
+  liveWsUrl: (siteId) => {
+    const token = localStorage.getItem('buildsure_token') || ''
+    const proto = window.location.protocol === 'https:' ? 'wss' : 'ws'
+    return `${proto}://${window.location.host}/api/ws/sites/${siteId}/live?token=${encodeURIComponent(token)}`
+  },
+
+  // ── Manager authentication (M4) ──────────────────────────────────────
+  login: (email, password) => API.post('/auth/login', { email, password }),
+  getMe: () => API.get('/auth/me'),
+  logout: () => API.post('/auth/logout'),
+
+  // ── Evidence-based risk alerts / notifications (M4) ──────────────────
+  getNotifications: (params = {}) => API.get('/notifications', { params }),
+  getUnreadCount: () => API.get('/notifications/unread-count'),
+  markNotificationRead: (id) => API.patch(`/notifications/${id}/read`),
+  markAllNotificationsRead: (siteId) =>
+    API.patch('/notifications/read-all', null, { params: siteId ? { site_id: siteId } : {} }),
+  deleteNotification: (id) => API.delete(`/notifications/${id}`),
 }
 
 export default API

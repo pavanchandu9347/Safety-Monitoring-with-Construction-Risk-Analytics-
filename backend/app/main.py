@@ -1,33 +1,69 @@
-from fastapi import FastAPI
+import os
+
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from app.database.database import init_db
-from app.api import sites, monitoring, hazards, risk, dashboard, demo, safety, live, video
+from app.api import (
+    sites, monitoring, hazards, risk, dashboard, demo, safety, live, video,
+    compliance, insurance, auth, notifications,
+)
+from app.auth.deps import require_site_access
 
 app = FastAPI(
-    title="Agentic Construction Risk Intelligence Platform",
-    description="Site Risk Monitoring & Hazard Detection (M1) · Safety Intelligence & Worker Protection (M2)",
-    version="2.0.0",
+    title="BuildSure",
+    description=(
+        "BuildSure — Construction Risk Intelligence Platform. "
+        "Site Risk Monitoring & Hazard Detection (M1) · Safety Intelligence & "
+        "Worker Protection (M2) · Compliance & Insurance Intelligence (M3) · "
+        "Manager Auth & Intelligent Risk Alerts (M4)"
+    ),
+    version="4.0.0",
 )
+
+# CORS origins are configurable; the default keeps local development working.
+# ``allow_credentials`` with a wildcard origin is invalid per the CORS spec, so
+# credentials are only enabled when explicit origins are configured.
+_cors_env = os.environ.get("CORS_ALLOW_ORIGINS", "").strip()
+if _cors_env:
+    _origins = [o.strip() for o in _cors_env.split(",") if o.strip()]
+    _allow_credentials = True
+else:
+    _origins = [
+        "http://localhost:5173", "http://localhost:5179",
+        "http://127.0.0.1:5173", "http://127.0.0.1:5179",
+    ]
+    _allow_credentials = False
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=_origins,
+    allow_credentials=_allow_credentials,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-app.include_router(sites.router, prefix="/api", tags=["Sites"])
-app.include_router(monitoring.router, prefix="/api", tags=["Monitoring"])
-app.include_router(hazards.router, prefix="/api", tags=["Hazards"])
-app.include_router(risk.router, prefix="/api", tags=["Risk Assessment"])
-app.include_router(dashboard.router, prefix="/api", tags=["Dashboard"])
-app.include_router(demo.router, prefix="/api", tags=["Demo"])
-app.include_router(safety.router, prefix="/api", tags=["Safety Intelligence"])
+# Public: authentication + health. Everything else requires a valid manager
+# token, and require_site_access additionally enforces per-site authorization
+# whenever a site_id appears in the path or query string.
+app.include_router(auth.router)
+app.include_router(notifications.router)
+
+_protected = [Depends(require_site_access)]
+app.include_router(sites.router, prefix="/api", tags=["Sites"], dependencies=_protected)
+app.include_router(monitoring.router, prefix="/api", tags=["Monitoring"], dependencies=_protected)
+app.include_router(hazards.router, prefix="/api", tags=["Hazards"], dependencies=_protected)
+app.include_router(risk.router, prefix="/api", tags=["Risk Assessment"], dependencies=_protected)
+app.include_router(dashboard.router, prefix="/api", tags=["Dashboard"], dependencies=_protected)
+app.include_router(demo.router, prefix="/api", tags=["Demo"], dependencies=_protected)
+app.include_router(safety.router, prefix="/api", tags=["Safety Intelligence"], dependencies=_protected)
+app.include_router(compliance.router, prefix="/api", tags=["Compliance Intelligence"], dependencies=_protected)
+app.include_router(insurance.router, prefix="/api", tags=["Insurance Intelligence"], dependencies=_protected)
+# live.router carries an authenticated WebSocket + token-backed MJPEG stream;
+# its HTTP routes protect themselves individually.
 app.include_router(live.router, prefix="/api", tags=["Live Analysis"])
-app.include_router(video.router, prefix="/api", tags=["Video Analysis"])
+app.include_router(video.router, prefix="/api", tags=["Video Analysis"], dependencies=_protected)
 
 
 @app.on_event("startup")
@@ -45,4 +81,4 @@ def shutdown():
 
 @app.get("/api/health")
 def health_check():
-    return {"status": "ok", "milestone": 2}
+    return {"status": "ok", "milestone": 4}

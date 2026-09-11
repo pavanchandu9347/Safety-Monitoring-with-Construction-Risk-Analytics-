@@ -1,12 +1,13 @@
 import { useDashboard } from '../hooks/useDashboard'
 import { formatTime } from '../utils/risk'
 import { useState, useRef, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { api } from '../services/api'
 import { useSite } from '../hooks/useDashboard'
 import {
   TrendingUp, TrendingDown, Minus, ShieldAlert, Droplets, Wrench, MapPin,
   Activity, Crosshair, Gauge, Radio, RefreshCw, Wrench as WrenchIcon, Sparkles, ListChecks,
-  Video, Play, Square, RadioTower, Upload, Loader2, Clapperboard
+  Video, Play, Square, RadioTower, Upload, Loader2, Clapperboard, CircleAlert, ArrowUpRight
 } from 'lucide-react'
 import { StatChip, Section, ActionBar } from '../components/progressive'
 
@@ -126,6 +127,21 @@ export default function Dashboard() {
   const [videoBusy, setVideoBusy] = useState(false)
   const [videoErr, setVideoErr] = useState(null)
   const videoFileRef = useRef(null)
+  const navigate = useNavigate()
+  const [activeAlert, setActiveAlert] = useState(null)
+
+  useEffect(() => {
+    api.getNotifications({ status: 'unread', limit: 20 })
+      .then((res) => {
+        const list = res.data || []
+        setActiveAlert(
+          list.find((n) => n.severity === 'CRITICAL')
+          || list.find((n) => n.severity === 'HIGH')
+          || null
+        )
+      })
+      .catch(() => {})
+  }, [data?.timestamp, siteId])
   const liveMeta = LIVE_META[live?.status] || LIVE_META.STOPPED
   const isLiveRunning = live?.status === 'LIVE' || live?.status === 'STARTING'
   const apiLiveVideoUrl = api.liveVideoUrl(siteId)
@@ -198,6 +214,57 @@ export default function Dashboard() {
           </button>
         </div>
       </div>
+
+      {/* ── Active risk alert (evidence-based) ── */}
+      {activeAlert && (
+        <div className="tech-panel border-l-[3px] p-4"
+          style={{ borderLeftColor: LEVEL_COLOR[activeAlert.severity] || '#ff5a3c' }}>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="flex items-start gap-3 min-w-0">
+              <div className="mt-1 flex items-center gap-2 readout tracking-widest text-[10px] font-bold"
+                style={{ color: LEVEL_COLOR[activeAlert.severity] || '#ff5a3c' }}>
+                <CircleAlert size={18} />
+                ACTIVE {activeAlert.severity} SITE ALERT
+              </div>
+              <div className="min-w-0">
+                <div className="text-white font-bold text-sm">{activeAlert.title}</div>
+                <p className="text-slate-400 text-xs mt-0.5 line-clamp-2">{activeAlert.message}</p>
+                {activeAlert.evidence?.contributing_factors?.length > 0 ? (
+                  <ul className="mt-2 space-y-1">
+                    {activeAlert.evidence.contributing_factors.slice(0, 4).map((f, i) => (
+                      <li key={i} className="flex items-center gap-2 text-[11px] text-slate-400">
+                        <span className="w-1 h-1 rounded-full shrink-0" style={{ background: LEVEL_COLOR[activeAlert.severity] }} />
+                        <span>{f.factor}
+                          {f.severity && <span className="readout ml-1 text-[9px] text-slate-500">[{f.severity}]</span>}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="mt-1 readout text-[10px] text-slate-500 tracking-widest">EVIDENCE UNAVAILABLE FOR CONTRIBUTING CAUSES</p>
+                )}
+              </div>
+            </div>
+            <div className="flex flex-col items-end gap-2 shrink-0">
+              <div className="readout text-[9px] text-slate-500 tracking-widest">RISK SCORE</div>
+              <div className="readout text-2xl font-bold tabular-nums"
+                style={{ color: LEVEL_COLOR[activeAlert.severity] || '#ff5a3c' }}>
+                {activeAlert.risk_score?.toFixed(0) ?? '—'} <span className="text-xs text-slate-500">/100</span>
+              </div>
+              <button
+                onClick={() => navigate(
+                  activeAlert.type === 'incident' ? '/insurance'
+                    : activeAlert.type === 'ppe_alert' || activeAlert.type === 'safety_alert' ? '/safety'
+                    : '/analysis'
+                )}
+                className="flex items-center gap-1 readout text-[10px] tracking-widest text-info hover:text-white"
+              >
+                VIEW ANALYSIS <ArrowUpRight size={12} />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Input video strip (single primary source) ── */}
       <div className="tech-panel p-3">

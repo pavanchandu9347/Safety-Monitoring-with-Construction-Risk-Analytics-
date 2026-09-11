@@ -9,8 +9,9 @@ from datetime import datetime, timezone
 
 from app.database.database import get_db
 from app.models.models import (
-    Site, Zone, Worker, Equipment, SafetyViolation, SafetyAlert, SafetyAssessment,
+    Site, Zone, Worker, Equipment, SafetyViolation, SafetyAlert, SafetyAssessment, Manager,
 )
+from app.auth.deps import require_auth
 from app.schemas.schemas import (
     WorkerResponse, SafetyViolationResponse, SafetyAlertResponse,
     SafetyAssessmentResponse, SafetyDashboardResponse,
@@ -141,10 +142,11 @@ def list_alerts(site_id: str, db: Session = Depends(get_db)):
 
 
 @router.patch("/safety/violations/{violation_id}/status")
-def update_violation_status(violation_id: str, status: str = "resolved", db: Session = Depends(get_db)):
+def update_violation_status(violation_id: str, status: str = "resolved", db: Session = Depends(get_db), manager: Manager = Depends(require_auth)):
     violation = db.query(SafetyViolation).filter(SafetyViolation.id == violation_id).first()
     if not violation:
         raise HTTPException(status_code=404, detail="Violation not found")
+    authorize_site(manager, violation.site_id)
     violation.status = status
     if status == "resolved":
         violation.resolved_at = datetime.now(timezone.utc)

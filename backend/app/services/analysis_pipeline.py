@@ -30,8 +30,15 @@ from sqlalchemy.orm import Session
 
 from app.config import REPO_ROOT, ensure_storage
 from app.models.models import (
+    ClaimRecord,
+    ComplianceAssessment,
+    ComplianceFinding,
+    ComplianceRequirement,
     Equipment,
     Hazard,
+    InspectionRecord,
+    InsuranceAssessment,
+    InsuranceIncident,
     MonitoringEvent,
     Recommendation,
     RiskAssessment,
@@ -46,6 +53,7 @@ from app.models.models import (
 )
 from app.services.safety_alerts import build_safety_alerts
 from app.services.video_analysis import get_video_report
+from app.services.notification_service import evaluate_analysis
 
 _DEBUG = os.environ.get("TESTING") == "1"
 
@@ -526,6 +534,181 @@ def run_analysis(
         )
         db.add(safety_assessment)
 
+        # ── Milestone 3 · Compliance & Insurance agents ─────────────────────
+        from app.services.compliance_baseline import (
+            ensure_compliance_baseline,
+            site_compliance_baseline,
+        )
+
+        ensure_compliance_baseline(db, site_id)
+        reqs, insp_ctx = site_compliance_baseline(db, site_id)
+
+        m3_context: Dict[str, Any] = {
+            "site_id": site_id,
+            "analysis_id": analysis_id,
+            "timestamp": now,
+            "requirements": reqs,
+            "inspections": insp_ctx,
+            "violations": [
+                {
+                    "violation_type": h.get("hazard_type", "violation"),
+                    "description": h.get("description", ""),
+                    "severity": _SEVERITY_MAP.get(str(h.get("severity", "medium")).lower(), "MEDIUM"),
+                    "status": "open",
+                    "source": h.get("source", "video_vision"),
+                }
+                for h in safety_result.get("hazards", [])
+            ] + [
+                {
+                    "violation_type": "ppe_violation",
+                    "description": (
+                        f"{v.get('worker_id', 'Worker')} missing "
+                        f"{', '.join(v.get('missing_ppe', []) or ['PPE'])}"
+                    ),
+                    "severity": "HIGH",
+                    "status": "open",
+                    "source": "ppe_detection",
+                }
+                for v in ppe_res.get("violations", [])
+            ],
+            "hazards": list(risk_result["hazards"]) + list(safety_result.get("hazards", [])),
+            "worker_ppe": worker_ppe,
+            "safety": safety_result,
+            "risk": risk_result,
+            "alerts": alert_rows,
+            "accident_zones": report.get("accident_zones"),
+            "equipment": equipment_data,
+            "site_conditions": site_conditions,
+            "video": {"video_source": Path(path).name, "lighting_condition": lighting},
+        }
+
+        from app.agents.compliance_agent import ComplianceAgent
+        from app.agents.insurance_agent import InsuranceAgent
+
+        compliance_result = ComplianceAgent().analyze_site(m3_context)
+        insurance_result = InsuranceAgent().analyze_site(
+            {**m3_context, "compliance": compliance_result}
+        )
+
+        for f in compliance_result["findings"]:
+            db.add(ComplianceFinding(
+                id=f["id"],
+                site_id=site_id,
+                analysis_id=analysis_id,
+                requirement_id=f.get("requirement_id"),
+                category=f.get("category", ""),
+                requirement=f.get("requirement", ""),
+                description=f.get("description", ""),
+                status=f.get("status", "NOT_VERIFIED"),
+                severity=f.get("severity", "MEDIUM"),
+                evidence=f.get("evidence", ""),
+                evidence_meta=f.get("evidence_meta", {}),
+                source=f.get("source", "video_vision"),
+                timestamp=(
+                    datetime.fromisoformat(f["timestamp"].replace("Z", "+00:00"))
+                    if isinstance(f.get("timestamp"), str)
+                    else (f.get("timestamp") or now)
+                ),
+            ))
+
+        by_req_id = {f.get("requirement_id"): f for f in compliance_result["findings"]}
+        for req_row in db.query(ComplianceRequirement).filter(
+            ComplianceRequirement.site_id == site_id
+        ).all():
+            find = by_req_id.get(req_row.id)
+            if find:
+                req_row.status = find["status"]
+                req_row.evidence = find.get("evidence", "")
+                req_row.last_checked = now
+
+        by_type = {
+            insp["inspection_type"]: insp
+            for insp in compliance_result["inspections"]["inspections"]
+        }
+        for insp_row in db.query(InspectionRecord).filter(
+            InspectionRecord.site_id == site_id
+        ).all():
+            tracked = by_type.get(insp_row.inspection_type)
+            if tracked:
+                insp_row.status = tracked["status"]
+                insp_row.evidence = tracked.get("evidence", "")
+                insp_row.last_inspection = None
+
+        cr = compliance_result
+        compliance_assessment = ComplianceAssessment(
+            id=str(uuid.uuid4()),
+            site_id=site_id,
+            analysis_id=analysis_id,
+            timestamp=now,
+            overall_score=cr.get("overall_score"),
+            compliance_level=cr.get("compliance_level"),
+            category_scores=cr.get("category_scores", {}),
+            requirements_checked=cr.get("requirements_checked", 0),
+            compliant_count=cr.get("compliant_count", 0),
+            non_compliant_count=cr.get("non_compliant_count", 0),
+            not_verified_count=cr.get("not_verified_count", 0),
+            open_violations=cr.get("open_violations", 0),
+            overdue_inspections=(compliance_result.get("inspections") or {}).get("overdue", 0),
+            evidence_available=1 if cr.get("evidence_available") else 0,
+            score_basis=cr.get("score_basis", ""),
+            summary=cr.get("summary", ""),
+            recommendations=cr.get("recommendations", []),
+            report=cr.get("report", {}),
+        )
+        db.add(compliance_assessment)
+
+        for inc in insurance_result.get("incidents", []):
+            inc_ts = inc.get("timestamp", now)
+            if isinstance(inc_ts, str):
+                try:
+                    inc_ts = datetime.fromisoformat(inc_ts.replace("Z", "+00:00"))
+                except ValueError:
+                    inc_ts = now
+            db.add(InsuranceIncident(
+                id=str(uuid.uuid4()),
+                site_id=site_id,
+                analysis_id=analysis_id,
+                incident_type=inc.get("incident_type", ""),
+                description=inc.get("description", ""),
+                severity=inc.get("severity", "LOW"),
+                timestamp=inc_ts,
+                workers_involved=[{"count": inc.get("affected_workers", 0)}],
+                hazards=inc.get("evidence", []),
+                violations=[],
+                evidence=inc.get("evidence", []),
+                claim_risk=(inc.get("severity_details") or {}).get("severity_level", "LOW"),
+            ))
+
+        for doc in (insurance_result.get("claim_documentation") or {}).get("documents", []):
+            db.add(ClaimRecord(
+                id=doc.get("document_id", str(uuid.uuid4())),
+                site_id=site_id,
+                analysis_id=analysis_id,
+                incident_id=doc.get("incident_id"),
+                status="DRAFTED",
+                claim_summary=doc.get("description", ""),
+                documentation=[doc],
+                created_at=now,
+            ))
+
+        ir = insurance_result
+        db.add(InsuranceAssessment(
+            id=str(uuid.uuid4()),
+            site_id=site_id,
+            analysis_id=analysis_id,
+            timestamp=now,
+            risk_score=ir.get("insurance_risk_score", 0),
+            risk_level=ir.get("risk_level", "LOW"),
+            exposure=ir.get("exposure", {}),
+            claim_risk=ir.get("claim_risk", {}),
+            open_incidents=ir.get("incident_count", 0),
+            incident_severity=ir.get("incident_severity", "LOW"),
+            factors=ir.get("risk_factors", []),
+            evidence=(ir.get("claim_risk") or {}).get("evidence", []),
+            summary=ir.get("summary", ""),
+            recommendations=ir.get("recommendations", []),
+        ))
+
         for z in zones:
             z.current_risk_score = rd["overall_score"]
             z.risk_level = rd["risk_level"]
@@ -557,8 +740,69 @@ def run_analysis(
 
         db.commit()
         db.refresh(analysis)
+
+        # Milestone 4: raise evidence-based risk alerts. Uses ONLY the real,
+        # persisted results of this run. Never allowed to fail the analysis.
+        try:
+            evaluate_analysis(
+                db,
+                site_id,
+                analysis_id,
+                risk=_risk_summary(rd),
+                safety=_safety_summary(safety_result),
+                alerts=[
+                    {
+                        "id": a.id,
+                        "message": a.message,
+                        "severity": a.severity,
+                        "zone_id": a.zone_id,
+                    }
+                    for a in db.query(SafetyAlert)
+                    .filter(SafetyAlert.analysis_id == analysis_id).all()
+                ],
+                violations=[
+                    {
+                        "id": v.id,
+                        "violation_type": v.violation_type,
+                        "description": v.description,
+                        "severity": v.severity,
+                        "worker_id": v.worker_id,
+                        "zone_id": v.zone_id,
+                    }
+                    for v in db.query(SafetyViolation)
+                    .filter(SafetyViolation.analysis_id == analysis_id).all()
+                ],
+                hazards=[
+                    {
+                        "id": h.id,
+                        "description": h.description or h.hazard_type,
+                        "hazard_type": h.hazard_type,
+                        "severity": h.severity,
+                        "zone_id": h.zone_id,
+                    }
+                    for h in db.query(Hazard)
+                    .filter(Hazard.analysis_id == analysis_id).all()
+                ],
+                incidents=[
+                    {
+                        "id": inc.id,
+                        "description": inc.description,
+                        "severity": inc.severity,
+                    }
+                    for inc in db.query(InsuranceIncident)
+                    .filter(InsuranceIncident.analysis_id == analysis_id).all()
+                ],
+            )
+        except Exception:  # noqa: BLE001
+            import logging
+            logging.getLogger(__name__).exception(
+                "notification evaluation failed for analysis %s", analysis_id
+            )
+
         return build_analysis_response(db, analysis, extra={
             "event_id": event.id,
+            "compliance": compliance_result,
+            "insurance": insurance_result,
             "safety": _safety_summary(safety_result),
             "risk": _risk_summary(rd),
         })
