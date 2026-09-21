@@ -3,8 +3,13 @@ from sqlalchemy.orm import sessionmaker, DeclarativeBase
 
 import os
 
+from dotenv import load_dotenv, find_dotenv
+
 _dir = os.path.dirname(os.path.abspath(__file__))
-DATABASE_URL = f"sqlite:///{os.path.join(_dir, '..', '..', 'construction_risk.db')}"
+_default_db = os.path.join(_dir, '..', '..', 'construction_risk.db')
+load_dotenv(find_dotenv())
+# Enterprise override: point the platform at any SQLAlchemy URL via DATABASE_URL.
+DATABASE_URL = os.environ.get("DATABASE_URL", f"sqlite:///{_default_db}")
 
 engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)

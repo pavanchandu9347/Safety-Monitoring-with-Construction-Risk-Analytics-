@@ -113,6 +113,7 @@ class Site(Base):
     claim_records = relationship("ClaimRecord", back_populates="site", cascade="all, delete-orphan")
     managers = relationship("Manager", back_populates="site")
     notifications = relationship("Notification", back_populates="site", cascade="all, delete-orphan")
+    reports = relationship("RiskReport", back_populates="site", cascade="all, delete-orphan")
 
 
 class VideoAnalysis(Base):
@@ -523,6 +524,32 @@ class SafetyAlert(Base):
     timestamp = Column(DateTime, default=datetime.utcnow)
 
     site = relationship("Site")
+
+
+class RiskReport(Base):
+    """A persisted executive intelligence report for ONE analysis.
+
+    Reports are generated ONLY from persisted analysis results (never fabricated)
+    and always reference the exact ``analysis_id`` they were built from — a report
+    can never silently combine unrelated analyses. ``content`` stores the full
+    structured Reporting Agent output; ``summary`` is the short executive line.
+    """
+
+    __tablename__ = "risk_reports"
+
+    id = Column(String, primary_key=True, default=gen_uuid)
+    site_id = Column(String, ForeignKey("sites.id"), nullable=False, index=True)
+    analysis_id = Column(String, ForeignKey("video_analyses.id"), nullable=False, index=True)
+    report_type = Column(String, default="risk_intelligence")
+    status = Column(String, default="completed")   # completed | failed
+    title = Column(String, default="")
+    summary = Column(Text, default="")
+    content = Column(JSON, default=dict)
+    generated_by = Column(String, ForeignKey("managers.id"), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+    site = relationship("Site", back_populates="reports")
+    analysis = relationship("VideoAnalysis")
 
 
 class SafetyAssessment(Base):

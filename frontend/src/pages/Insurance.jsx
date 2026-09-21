@@ -5,7 +5,7 @@ import { formatTime } from '../utils/risk'
 import { StatChip, Section, ActionBar } from '../components/progressive'
 import {
   ShieldAlert, AlertTriangle, FileText, Activity, Gauge, Users, Flame,
-  RefreshCw, ChevronDown, FileJson, Info,
+  RefreshCw, Info,
 } from 'lucide-react'
 
 const LEVEL_HEX = {
@@ -57,7 +57,6 @@ export default function Insurance() {
   const [loading, setLoading] = useState(true)
   const [running, setRunning] = useState(false)
   const [tab, setTab] = useState(null)
-  const [showRaw, setShowRaw] = useState(false)
   const [error, setError] = useState(null)
 
   const load = async () => {
@@ -315,21 +314,6 @@ export default function Insurance() {
             {recs.length === 0 && <div className="readout text-[11px] text-slate-500">NO RECOMMENDATIONS</div>}
           </div>
         </Section>
-      )}
-
-      {/* Raw toggle */}
-      {dash && (
-        <div className="tech-panel p-3">
-          <button onClick={() => setShowRaw(!showRaw)}
-            className="flex items-center gap-1.5 readout text-[10px] text-slate-500 hover:text-white">
-            <FileJson size={12} /> {showRaw ? 'HIDE ' : 'VIEW '}RAW PAYLOAD <ChevronDown size={12} className={showRaw ? 'rotate-180' : ''} />
-          </button>
-          {showRaw && (
-            <pre className="text-[10px] text-slate-400 bg-[#080b0f] border border-steel p-3 overflow-auto max-h-72 mt-2">
-              {JSON.stringify(dash, null, 2)}
-            </pre>
-          )}
-        </div>
       )}
     </div>
   )

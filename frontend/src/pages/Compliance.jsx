@@ -5,7 +5,7 @@ import { formatTime } from '../utils/risk'
 import { StatChip, Section, ActionBar } from '../components/progressive'
 import {
   ShieldCheck, ShieldAlert, AlertTriangle, CheckCircle2, Clock,
-  ListChecks, FileWarning, RefreshCw, ChevronDown, FileJson, Info,
+  ListChecks, FileWarning, RefreshCw, Info,
 } from 'lucide-react'
 
 const LEVEL_HEX = {
@@ -41,13 +41,31 @@ const TABS = [
   { key: 'recommendations', label: 'Recommendations', icon: Info },
 ]
 
+function RequirementBadge({ status }) {
+  if (status === 'COMPLIANT') {
+    return (
+      <span className="readout text-[9px] font-bold px-1.5 py-0.5 shrink-0"
+        style={{ color: '#36d17e', border: '1px solid #36d17e' }}>MET</span>
+    )
+  }
+  if (status === 'NOT_VERIFIED' || status === 'INSUFFICIENT_EVIDENCE') {
+    return (
+      <span className="readout text-[9px] font-bold px-1.5 py-0.5 shrink-0"
+        style={{ color: '#94a3b8', border: '1px solid #475569' }}>NOT VERIFIED</span>
+    )
+  }
+  return (
+    <span className="readout text-[9px] font-bold px-1.5 py-0.5 shrink-0"
+      style={{ color: '#ff5a3c', border: '1px solid #ff5a3c' }}>NOT MET</span>
+  )
+}
+
 export default function Compliance() {
   const siteId = useSite()
   const [dash, setDash] = useState(null)
   const [loading, setLoading] = useState(true)
   const [running, setRunning] = useState(false)
   const [tab, setTab] = useState(null)
-  const [showRaw, setShowRaw] = useState(false)
   const [error, setError] = useState(null)
 
   const load = async () => {
@@ -192,20 +210,18 @@ export default function Compliance() {
       {tab === 'requirements' && (
         <Section title="COMPLIANCE REQUIREMENTS" onClose={() => setTab(null)}>
           <div className="space-y-2 max-h-[480px] overflow-y-auto">
-            {findings.map((f) => {
-              const isOK = f.status === 'COMPLIANT'
-              return (
-                <div key={f.id} className="flex items-start justify-between gap-3 bg-[#0a0e13] border border-steel p-3">
-                  <div className="min-w-0">
-                    <div className="readout text-[11px] text-slate-200 font-semibold">{f.requirement}</div>
-                    <div className="readout text-[9px] text-slate-500 mt-0.5">CATEGORY: {f.category?.toUpperCase()} · {f.status}</div>
-                  </div>
-                  <span className="readout text-[9px] font-bold px-1.5 py-0.5 shrink-0"
-                    style={{ color: isOK ? '#36d17e' : '#ff5a3c', border: `1px solid ${isOK ? '#36d17e' : '#ff5a3c'}` }}>{isOK ? 'MET' : 'NOT MET'}
-                  </span>
+            {findings.map((f) => (
+              <div key={f.id} className="flex items-start justify-between gap-3 bg-[#0a0e13] border border-steel p-3">
+                <div className="min-w-0">
+                  <div className="readout text-[11px] text-slate-200 font-semibold">{f.requirement}</div>
+                  <div className="readout text-[9px] text-slate-500 mt-0.5">CATEGORY: {f.category?.toUpperCase()} · {f.status}</div>
+                  {f.status === 'NOT_VERIFIED' && (
+                    <div className="readout text-[9px] text-slate-500 mt-0.5">{f.evidence || 'No evidence available — not counted as non-compliant.'}</div>
+                  )}
                 </div>
-              )
-            })}
+                <RequirementBadge status={f.status} />
+              </div>
+            ))}
           </div>
         </Section>
       )}
@@ -279,21 +295,6 @@ export default function Compliance() {
             {recs.length === 0 && <div className="readout text-[11px] text-slate-500">NO RECOMMENDATIONS</div>}
           </div>
         </Section>
-      )}
-
-      {/* Raw toggle */}
-      {dash && (
-        <div className="tech-panel p-3">
-          <button onClick={() => setShowRaw(!showRaw)}
-            className="flex items-center gap-1.5 readout text-[10px] text-slate-500 hover:text-white">
-            <FileJson size={12} /> {showRaw ? 'HIDE ' : 'VIEW '}RAW PAYLOAD <ChevronDown size={12} className={showRaw ? 'rotate-180' : ''} />
-          </button>
-          {showRaw && (
-            <pre className="text-[10px] text-slate-400 bg-[#080b0f] border border-steel p-3 overflow-auto max-h-72 mt-2">
-              {JSON.stringify(dash, null, 2)}
-            </pre>
-          )}
-        </div>
       )}
     </div>
   )

@@ -7,7 +7,8 @@ import { useSite } from '../hooks/useDashboard'
 import {
   TrendingUp, TrendingDown, Minus, ShieldAlert, Droplets, Wrench, MapPin,
   Activity, Crosshair, Gauge, Radio, RefreshCw, Wrench as WrenchIcon, Sparkles, ListChecks,
-  Video, Play, Square, RadioTower, Upload, Loader2, Clapperboard, CircleAlert, ArrowUpRight
+  Video, Play, Square, RadioTower, Upload, Loader2, Clapperboard, CircleAlert, ArrowUpRight,
+  FileText,
 } from 'lucide-react'
 import { StatChip, Section, ActionBar } from '../components/progressive'
 
@@ -155,7 +156,6 @@ export default function Dashboard() {
     } catch { /* backend offline — non-fatal */ }
   }
   useEffect(() => { loadVideoMeta() }, [siteId])
-  useEffect(() => { if (videoBusy) return; loadVideoMeta() }, [data?.timestamp])
 
   const analyzeVideo = async (file = null) => {
     setVideoBusy(true); setVideoErr(null)
@@ -211,6 +211,10 @@ export default function Dashboard() {
           <button onClick={() => analyzeVideo()} disabled={videoBusy}
             className="flex items-center gap-2 bg-hazard hover:bg-hazard-2 text-black readout text-[11px] font-bold tracking-wider px-3 py-2 transition disabled:opacity-60">
             {videoBusy ? <><Loader2 className="animate-spin" size={13} /> SAMPLING › YOLO › AGENTS</> : <><RefreshCw size={13} /> ANALYZE SITE VIDEO</>}
+          </button>
+          <button onClick={() => navigate('/reports')}
+            className="flex items-center gap-2 border border-info/60 text-info hover:bg-info hover:text-black readout text-[11px] font-bold tracking-wider px-3 py-2 transition">
+            <FileText size={13} /> VIEW REPORTS
           </button>
         </div>
       </div>

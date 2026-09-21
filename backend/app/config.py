@@ -18,6 +18,14 @@ REPO_ROOT = BACKEND_DIR.parent
 
 load_dotenv(BACKEND_DIR / ".env")
 
+# ── Enterprise deployment ─────────────────────────────────────────────────────
+# APP_ENV selects the runtime profile (development | production). LOG_LEVEL
+# drives structured logging verbosity; credentials are never logged.
+APP_ENV: str = os.environ.get("APP_ENV", "development").strip().lower()
+LOG_LEVEL: str = os.environ.get("LOG_LEVEL", "INFO").strip().upper()
+# Informational deployment URLs (used by the frontend console / docs).
+DEPLOYMENT_URL: str = os.environ.get("DEPLOYMENT_URL", "http://localhost:5179").strip()
+
 VIDEO_EXTENSIONS = (".mp4", ".mov", ".avi", ".mkv", ".webm", ".m4v")
 
 # Video files are copied/kept here on upload. Stored videos live here too.

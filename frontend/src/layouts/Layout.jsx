@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { Outlet, NavLink, useLocation, useNavigate } from 'react-router-dom'
 import {
   LayoutDashboard, ShieldAlert, Activity, Camera, Radio, HardHat,
-  Crosshair, ShieldCheck, Bell, LogOut,
+  Crosshair, ShieldCheck, Bell, LogOut, BrainCircuit, FileText,
   CheckCheck, User as UserIcon
 } from 'lucide-react'
 import { api } from '../services/api'
@@ -32,6 +32,8 @@ const NAV = [
   { to: '/safety', label: 'SAFETY CTL', icon: HardHat, code: '06' },
   { to: '/compliance', label: 'COMPLIANCE', icon: ShieldCheck, code: '07' },
   { to: '/insurance', label: 'INSURANCE', icon: ShieldAlert, code: '08' },
+  { to: '/intelligence', label: 'INTELLIGENCE', icon: BrainCircuit, code: '09' },
+  { to: '/reports', label: 'REPORTS', icon: FileText, code: '10' },
 ]
 
 function sourcePath(type) {
@@ -321,7 +323,7 @@ export default function Layout() {
       <footer className="h-7 border-t border-steel bg-[#0e1218] flex items-center px-4 readout text-[10px] text-slate-500 gap-6">
         <span className="text-ok">● SYS ONLINE</span>
         <span className="text-slate-500">|</span>
-        <span>MILESTONE 4 · MANAGER AUTH + SMART RISK ALERTS</span>
+        <span>MILESTONE 4 · REPORTING INTELLIGENCE + ENTERPRISE DEPLOYMENT</span>
         <span className="text-slate-500">|</span>
         <span>PPE ENGINE: READY</span>
         <span className="ml-auto text-slate-500">BUILDSURE-00 / RT 24:00:00</span>

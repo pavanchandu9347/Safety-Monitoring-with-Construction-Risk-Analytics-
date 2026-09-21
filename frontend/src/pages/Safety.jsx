@@ -4,7 +4,7 @@ import { useSite } from '../hooks/useDashboard'
 import { formatTime } from '../utils/risk'
 import {
   HardHat, ShieldAlert, AlertTriangle, Users, Activity, ImageIcon,
-  ChevronDown, ChevronRight, X, Eye, RefreshCw, FileJson, Video,
+  X, Eye, RefreshCw, FileJson, Video,
   ScanSearch, BadgeAlert,
 } from 'lucide-react'
 
@@ -98,14 +98,12 @@ export default function Safety() {
   const [running, setRunning] = useState(false)
   const [error, setError] = useState(null)
   const [tab, setTab] = useState(null)
-  const [showRaw, setShowRaw] = useState(false)
 
   // Image analysis state
   const [img, setImg] = useState(null)
   const [analyzing, setAnalyzing] = useState(false)
   const [imgAnalysis, setImgAnalysis] = useState(null)
   const [imgError, setImgError] = useState(null)
-  const [showImgRaw, setShowImgRaw] = useState(false)
   const fileRef = useRef(null)
 
   const load = async () => {
@@ -133,7 +131,7 @@ export default function Safety() {
     if (!file) return
     const src = URL.createObjectURL(file)
     const tmp = new Image()
-    tmp.onload = () => { setImg({ src, width: tmp.width, height: tmp.height, file }); setImgAnalysis(null); setImgError(null); setShowImgRaw(false) }
+    tmp.onload = () => { setImg({ src, width: tmp.width, height: tmp.height, file }); setImgAnalysis(null); setImgError(null) }
     tmp.src = src
   }
 
@@ -308,7 +306,7 @@ export default function Safety() {
         <div className="tech-panel p-4">
           <div className="flex items-center justify-between mb-3">
             <span className="bracket-label flex items-center gap-1.5"><ImageIcon size={12} /> IMAGE ANALYSIS <span className="text-slate-400">· REAL YOLO INFERENCE</span></span>
-            <button onClick={() => { setImg(null); setImgAnalysis(null); setImgError(null); setShowImgRaw(false) }}
+            <button onClick={() => { setImg(null); setImgAnalysis(null); setImgError(null) }}
               className="readout text-[10px] text-slate-500 hover:text-white flex items-center gap-1"><X size={11} /> CLEAR</button>
           </div>
 
@@ -421,15 +419,6 @@ export default function Safety() {
                       </div>
                     )}
                   </>
-                )}
-                <button onClick={() => setShowImgRaw(!showImgRaw)}
-                  className="flex items-center gap-1.5 readout text-[10px] text-slate-500 hover:text-white">
-                  <FileJson size={12} /> {showImgRaw ? 'HIDE ' : 'VIEW '}RAW RESPONSE <ChevronDown size={12} className={showImgRaw ? 'rotate-180' : ''} />
-                </button>
-                {showImgRaw && (
-                  <pre className="text-[10px] text-slate-400 bg-[#080b0f] border border-steel p-3 overflow-auto max-h-72">
-                    {JSON.stringify(imgAnalysis, null, 2)}
-                  </pre>
                 )}
               </div>
             </div>
@@ -641,20 +630,6 @@ export default function Safety() {
         </Section>
       )}
 
-      {/* ── Raw payload toggle ── */}
-      {analysis && (
-        <div className="tech-panel p-3">
-          <button onClick={() => setShowRaw(!showRaw)}
-            className="flex items-center gap-1.5 readout text-[10px] text-slate-500 hover:text-white">
-            <FileJson size={12} /> {showRaw ? 'HIDE ' : 'VIEW '}RAW ANALYSIS PAYLOAD <ChevronDown size={12} className={showRaw ? 'rotate-180' : ''} />
-          </button>
-          {showRaw && (
-            <pre className="text-[10px] text-slate-400 bg-[#080b0f] border border-steel p-3 overflow-auto max-h-72 mt-2">
-              {JSON.stringify(analysis, null, 2)}
-            </pre>
-          )}
-        </div>
-      )}
     </div>
   )
 }

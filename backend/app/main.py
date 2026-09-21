@@ -7,7 +7,7 @@ from fastapi.staticfiles import StaticFiles
 from app.database.database import init_db
 from app.api import (
     sites, monitoring, hazards, risk, dashboard, demo, safety, live, video,
-    compliance, insurance, auth, notifications,
+    compliance, insurance, auth, notifications, reports,
 )
 from app.auth.deps import require_site_access
 
@@ -17,7 +17,8 @@ app = FastAPI(
         "BuildSure — Construction Risk Intelligence Platform. "
         "Site Risk Monitoring & Hazard Detection (M1) · Safety Intelligence & "
         "Worker Protection (M2) · Compliance & Insurance Intelligence (M3) · "
-        "Manager Auth & Intelligent Risk Alerts (M4)"
+        "Manager Auth & Intelligent Risk Alerts (M4) · Reporting Intelligence "
+        "& Enterprise Deployment (M4)"
     ),
     version="4.0.0",
 )
@@ -60,6 +61,7 @@ app.include_router(demo.router, prefix="/api", tags=["Demo"], dependencies=_prot
 app.include_router(safety.router, prefix="/api", tags=["Safety Intelligence"], dependencies=_protected)
 app.include_router(compliance.router, prefix="/api", tags=["Compliance Intelligence"], dependencies=_protected)
 app.include_router(insurance.router, prefix="/api", tags=["Insurance Intelligence"], dependencies=_protected)
+app.include_router(reports.router, prefix="/api", tags=["Reporting Intelligence"], dependencies=_protected)
 # live.router carries an authenticated WebSocket + token-backed MJPEG stream;
 # its HTTP routes protect themselves individually.
 app.include_router(live.router, prefix="/api", tags=["Live Analysis"])
@@ -68,6 +70,8 @@ app.include_router(video.router, prefix="/api", tags=["Video Analysis"], depende
 
 @app.on_event("startup")
 def startup():
+    from app.logging_config import setup_logging
+    setup_logging()
     init_db()
     from app.services.seed import seed_demo_data
     seed_demo_data()

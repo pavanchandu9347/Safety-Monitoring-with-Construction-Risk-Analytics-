@@ -127,6 +127,21 @@ export const api = {
   markAllNotificationsRead: (siteId) =>
     API.patch('/notifications/read-all', null, { params: siteId ? { site_id: siteId } : {} }),
   deleteNotification: (id) => API.delete(`/notifications/${id}`),
+
+  // ── Reporting Intelligence & Enterprise Deployment (M4) ─────────────
+  getIntelligence: (siteId, analysisId = null) =>
+    API.get(`/sites/${siteId}/intelligence`, { params: analysisId ? { analysis_id: analysisId } : {} }),
+  getAnalyticsHistory: (siteId) => API.get(`/sites/${siteId}/analytics/history`),
+  generateReport: (siteId, { analysisId = null, reportType = 'risk_intelligence' } = {}) =>
+    API.post(
+      `/sites/${siteId}/reports/generate`,
+      { analysis_id: analysisId, report_type: reportType },
+      { timeout: 300000 }
+    ),
+  getReports: (siteId) => API.get(`/sites/${siteId}/reports`),
+  getLatestReport: (siteId) => API.get(`/sites/${siteId}/reports/latest`),
+  getReport: (siteId, reportId) => API.get(`/sites/${siteId}/reports/${reportId}`),
+  getReportText: (siteId, reportId) => API.get(`/sites/${siteId}/reports/${reportId}/text`),
 }
 
 export default API

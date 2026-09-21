@@ -8,6 +8,8 @@ import Analysis from './pages/Analysis'
 import Safety from './pages/Safety'
 import Compliance from './pages/Compliance'
 import Insurance from './pages/Insurance'
+import Intelligence from './pages/Intelligence'
+import Reports from './pages/Reports'
 import Login from './pages/Login'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { Loader2 } from 'lucide-react'
@@ -39,6 +41,8 @@ function App() {
           <Route path="/safety" element={<Safety />} />
           <Route path="/compliance" element={<Compliance />} />
           <Route path="/insurance" element={<Insurance />} />
+          <Route path="/intelligence" element={<Intelligence />} />
+          <Route path="/reports" element={<Reports />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
