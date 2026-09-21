@@ -11,6 +11,7 @@ import {
   FileText,
 } from 'lucide-react'
 import { StatChip, Section, ActionBar } from '../components/progressive'
+import { Gauge as ScoreGauge, TrendChart, EmptyState } from '../components/visuals'
 
 const LIVE_META = {
   LIVE: { label: '● LIVE ANALYSIS', color: '#36d17e' },
@@ -68,6 +69,37 @@ function RiskDial({ score, level }) {
       </div>
     </div>
   )
+}
+
+function MiniGauge({ label, value, sub, color }) {
+  return (
+    <div className="bg-[#0a0e13] border border-steel p-3 flex flex-col items-center justify-center">
+      <ScoreGauge value={value} color={color || '#4aa8ff'} label={sub} size={72} />
+      <div className="readout text-[8px] tracking-[0.2em] text-slate-500 mt-1.5">{label}</div>
+      {sub && <div className="readout text-[8px] font-bold tracking-widest mt-0.5" style={{ color: color || '#e2e8f0' }}>{sub}</div>}
+    </div>
+  )
+}
+
+function pickLevel(l) {
+  return LEVEL_COLOR[String(l || '').toUpperCase()] ? String(l).toUpperCase() : 'LOW'
+}
+
+function TrendPanel({ trend }) {
+  const real = (trend || []).filter((p) => p.score != null && Number.isFinite(Number(p.score)))
+  if (real.length >= 2) {
+    const data = real.map((p) => ({
+      label: p.timestamp ? String(p.timestamp).replace('T', ' ').slice(11, 16) : '—',
+      value: Math.round(p.score),
+    }))
+    return (
+      <div>
+        <TrendChart data={data} color={LEVEL_COLOR[pickLevel(real[real.length - 1]?.risk_level)] || '#f5a623'} height={150} />
+        <div className="readout text-[9px] text-slate-500 mt-1">{real.length} REAL PERSISTED ANALYSES</div>
+      </div>
+    )
+  }
+  return <EmptyState icon={Minus} msg="HISTORICAL DATA NOT AVAILABLE — ENOUGH PERSISTED ANALYSES REQUIRED FOR A TREND" />
 }
 
 function TrendBadge({ trend }) {
@@ -130,6 +162,25 @@ export default function Dashboard() {
   const videoFileRef = useRef(null)
   const navigate = useNavigate()
   const [activeAlert, setActiveAlert] = useState(null)
+  const [ov, setOv] = useState(null)
+
+  // One-time fetch of the M3 intelligence dashboards (NOT every poll tick).
+  useEffect(() => {
+    let active = true
+    Promise.allSettled([
+      api.getSafetyDashboard(siteId),
+      api.getComplianceDashboard(siteId),
+      api.getInsuranceDashboard(siteId),
+    ]).then(([s, c, i]) => {
+      if (!active) return
+      setOv({
+        safety: s.status === 'fulfilled' ? s.value?.data?.current_safety_assessment : null,
+        compliance: c.status === 'fulfilled' ? c.value?.data?.current_assessment : null,
+        insurance: i.status === 'fulfilled' ? i.value?.data?.current_assessment : null,
+      })
+    })
+    return () => { active = false }
+  }, [siteId])
 
   useEffect(() => {
     api.getNotifications({ status: 'unread', limit: 20 })
@@ -364,6 +415,26 @@ export default function Dashboard() {
       <div className="flex items-center gap-2">
         <div className="hazard-bar h-4 w-24"></div>
         <div className="readout text-[10px] text-slate-400 tracking-widest">ACTIVE WARNING TAPE · SITE STATUS: <span style={{ color }} className="font-bold">{level}</span></div>
+      </div>
+
+      {/* ── SITE INTELLIGENCE OVERVIEW · persisted evidence ── */}
+      <div className="tech-panel p-4">
+        <div className="bracket-label mb-3 flex items-center gap-1.5">
+          <Sparkles size={12} className="text-info" /> SITE INTELLIGENCE OVERVIEW
+          <span className="readout text-[9px] text-slate-600 tracking-widest">ALL SCORES FROM REAL ANALYSIS EVIDENCE — UNAVAILABLE STAYS BLANK</span>
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <MiniGauge label="OVERALL RISK" value={risk?.overall_score} sub={level} color={color} />
+          <MiniGauge label="SAFETY" value={ov?.safety?.overall_safety_score} sub={ov?.safety?.overall_safety_level} color={LEVEL_COLOR[ov?.safety?.overall_safety_level]} />
+          <MiniGauge label="COMPLIANCE" value={ov?.compliance?.overall_score} sub={ov?.compliance?.compliance_level} color={LEVEL_COLOR[ov?.compliance?.compliance_level]} />
+          <MiniGauge label="INSURANCE RISK" value={ov?.insurance?.risk_score} sub={ov?.insurance?.risk_level} color={LEVEL_COLOR[ov?.insurance?.risk_level]} />
+        </div>
+        <div className="mt-4 pt-3 border-t border-steel">
+          <div className="bracket-label mb-2 flex items-center gap-1.5">
+            <TrendingUp size={12} className="text-hazard" /> RISK TREND · PERSISTED ANALYSES
+          </div>
+          <TrendPanel trend={trend} />
+        </div>
       </div>
 
       {/* ── Main instrumentation row ── */}

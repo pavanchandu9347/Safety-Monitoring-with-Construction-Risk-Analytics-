@@ -58,10 +58,11 @@ JWT_ALGORITHM: str = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES: int = _env_int("ACCESS_TOKEN_EXPIRE_MINUTES", 480)
 
 # ── Demo manager bootstrap (placeholder credentials, never real secrets) ──────
-# If unset a random password is generated and logged at startup so the seeded
-# manager account is never created with a known, hardcoded password.
-DEFAULT_MANAGER_EMAIL: str = os.environ.get("DEFAULT_MANAGER_EMAIL", "manager@buildsure.io").strip()
-DEFAULT_MANAGER_PASSWORD: str = os.environ.get("DEFAULT_MANAGER_PASSWORD", "")
+# The seeded manager account uses these defaults so the demo login works
+# out-of-the-box: BuildSure@gmail.com / 123456. Override in backend/.env for
+# any real deployment. Tests override these variables explicitly.
+DEFAULT_MANAGER_EMAIL: str = os.environ.get("DEFAULT_MANAGER_EMAIL", "BuildSure@gmail.com").strip()
+DEFAULT_MANAGER_PASSWORD: str = os.environ.get("DEFAULT_MANAGER_PASSWORD", "123456")
 
 # ── Evidence-based risk-alert notification policy ─────────────────────────────
 # A notification is only generated when the risk/safety scores reach these

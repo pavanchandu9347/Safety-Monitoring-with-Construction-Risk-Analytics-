@@ -7,7 +7,7 @@ from app.database.database import SessionLocal
 from app.models.models import (
     Project, Site, Zone, Manager,
 )
-from app.auth.security import hash_password
+from app.auth.security import hash_password, verify_password
 from app.config import DEFAULT_MANAGER_EMAIL, DEFAULT_MANAGER_PASSWORD
 import logging
 import os
@@ -85,19 +85,44 @@ def seed_demo_data():
 
 
 def seed_manager(db):
-    """Create the demo manager account if one does not already exist.
+    """Upsert the demo manager account so the configured login always works.
 
     Credentials come from the environment (``DEFAULT_MANAGER_EMAIL`` /
-    ``DEFAULT_MANAGER_PASSWORD``). If no password is configured a cryptographically
-    random one is generated and logged ONCE at startup — the account is never
-    created with a known/hardcoded password.
+    ``DEFAULT_MANAGER_PASSWORD``). If a manager already exists for the default
+    site, its email/password are reconciled to the configured values — this
+    keeps an existing (old) account in the database usable with the new
+    credentials instead of leaving a stale hash behind.
+
+    If no password is configured a cryptographically random one is generated
+    and logged ONCE at startup for a brand-new account; an existing account is
+    never overwritten in that case.
     """
     email = DEFAULT_MANAGER_EMAIL.lower()
-    existing = db.query(Manager).filter(Manager.email == email).first()
-    if existing:
-        return
+    existing = (
+        db.query(Manager)
+        .filter(Manager.site_id == "site_riverside_main")
+        .order_by(Manager.id)
+        .first()
+    )
 
     password = DEFAULT_MANAGER_PASSWORD or None
+    if existing:
+        if not password:
+            return
+        changed = []
+        if existing.email != email:
+            existing.email = email
+            changed.append("email")
+        if not verify_password(password, existing.password_hash):
+            existing.password_hash = hash_password(password)
+            changed.append("password")
+        if changed:
+            logger.info(
+                "Reconciled demo manager account (%s) with configured credentials: %s",
+                existing.id, ", ".join(changed),
+            )
+        return
+
     if not password:
         password = secrets.token_urlsafe(12)
         logger.warning(

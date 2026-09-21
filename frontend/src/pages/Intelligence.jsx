@@ -51,7 +51,7 @@ function FindingRow({ f }) {
   )
 }
 
-function ReportView({ report, onClose }) {
+function ReportView({ report, onClose, history }) {
   const [text, setText] = useState(null)
   const [loadingText, setLoadingText] = useState(false)
   const [downloading, setDownloading] = useState(false)
@@ -100,7 +100,7 @@ function ReportView({ report, onClose }) {
       {text ? (
         <pre className="readout text-[10px] text-slate-400 whitespace-pre-wrap max-h-[480px] overflow-y-auto border border-steel p-3">{text}</pre>
       ) : (
-        <ReportSections report={report} />
+        <ReportSections report={report} history={history} />
       )}
     </Section>
   )
@@ -381,7 +381,7 @@ export default function Intelligence() {
                 </button>
               ))}
             </div>
-            {report && <div className="mt-3"><ReportView report={report} onClose={() => setReport(null)} /></div>}
+            {report && <div className="mt-3"><ReportView report={report} history={history} onClose={() => setReport(null)} /></div>}
           </div>
         </>
       )}

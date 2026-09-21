@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Navigate } from 'react-router-dom'
-import { HardHat, Eye, EyeOff, Loader2, CircleAlert, KeyRound, Tag } from 'lucide-react'
+import { HardHat, Eye, EyeOff, Loader2, CircleAlert, KeyRound, Tag, Lock, UserRound, Check } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 
 export default function Login() {
@@ -58,9 +58,9 @@ export default function Login() {
         </div>
         <div className="relative space-y-6">
           <h1 className="text-3xl font-black tracking-tight text-white leading-tight">
-            Manager Authentication
+            Manager Login
             <br />
-            <span className="text-hazard">Intelligent Risk Alerts</span>
+            <span className="text-hazard">Construction Risk Intelligence Platform</span>
           </h1>
           <ul className="space-y-3 text-sm text-slate-400">
             <li className="flex items-center gap-2"><span className="led led-on bg-ok" /> Per-site authorized access control</li>
@@ -75,9 +75,36 @@ export default function Login() {
       <div className="flex-1 flex items-center justify-center p-6">
         <form onSubmit={submit} className="w-full max-w-sm space-y-5">
           <div className="mb-2">
-            <div className="bracket-label mb-3">AUTHORIZED MANAGER SIGN-IN</div>
+            <div className="bracket-label mb-3">AUTHORIZED MANAGER LOGIN</div>
             <h2 className="text-xl font-bold text-white">Sign in to the control unit</h2>
-            <p className="text-sm text-slate-500 mt-1">Enter your account credentials to continue.</p>
+            <p className="text-sm text-slate-500 mt-1">Enter the manager credentials to continue.</p>
+          </div>
+
+          {/* Demo credential quick-access (password stays masked) */}
+          <div className="border border-steel-2 bg-[#0e1218] p-3 space-y-2">
+            <div className="readout text-[9px] tracking-[0.2em] text-slate-500 flex items-center gap-1.5">
+              <Lock size={11} className="text-info" /> DEMO ACCESS — CREDENTIALS ARE MASKED FOR SECURITY
+            </div>
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 min-w-0">
+                <UserRound size={12} className="text-slate-500 shrink-0" />
+                <span className="readout text-[11px] text-slate-200 truncate">BuildSure@gmail.com</span>
+              </div>
+              <button type="button" onClick={() => { setEmail('BuildSure@gmail.com'); setError('') }}
+                className="readout text-[9px] tracking-widest text-info hover:text-white flex items-center gap-1 shrink-0">
+                <Check size={11} /> FILL EMAIL
+              </button>
+            </div>
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 min-w-0">
+                <KeyRound size={12} className="text-slate-500 shrink-0" />
+                <span className="readout text-[11px] text-slate-200">{'123456'.replace(/./g, '•')}</span>
+              </div>
+              <button type="button" onClick={() => { setPassword('123456'); setShow(false); setError('') }}
+                className="readout text-[9px] tracking-widest text-info hover:text-white flex items-center gap-1 shrink-0">
+                <Check size={11} /> FILL PASSWORD
+              </button>
+            </div>
           </div>
 
           {error && (
@@ -97,7 +124,7 @@ export default function Login() {
                 autoFocus
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="manager@buildsure.io"
+                placeholder="BuildSure@gmail.com"
                 className="w-full bg-panel border border-steel rounded-[4px] pl-9 pr-3 py-2.5 text-sm text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-hazard"
               />
             </div>

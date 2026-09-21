@@ -19,6 +19,7 @@ export default function Reports() {
   const [selectedId, setSelectedId] = useState(null)
   const [mode, setMode] = useState('structured') // structured | text
   const [msg, setMsg] = useState(null) // { type, text }
+  const [hist, setHist] = useState(null)
 
   const load = async () => {
     setLoading(true)
@@ -29,6 +30,7 @@ export default function Reports() {
     } catch {
       setMsg({ type: 'err', text: 'REPORTS UNAVAILABLE — CHECK THE BACKEND CONNECTION.' })
     } finally { setLoading(false) }
+    api.getAnalyticsHistory(siteId).then((r) => setHist(r.data)).catch(() => setHist(null))
   }
   useEffect(() => { load() }, [siteId])
 
@@ -174,7 +176,7 @@ export default function Reports() {
             </div>
           </div>
 
-          {mode === 'structured' && <ReportSections report={selected} />}
+          {mode === 'structured' && <ReportSections report={selected} history={hist} />}
 
           {mode === 'text' && <FullText siteId={siteId} report={selected} />}
         </div>

@@ -3,8 +3,20 @@ import { api } from '../services/api'
 import { useSite } from '../hooks/useDashboard'
 import { formatTime } from '../utils/risk'
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
-import { Activity, RefreshCw, ToyBrick, Lightbulb, ShieldAlert, TrendingUp, Loader2 } from 'lucide-react'
+import { Activity, RefreshCw, ToyBrick, Lightbulb, ShieldAlert, TrendingUp, Loader2, Video, ScanLine, ListChecks, Umbrella, BrainCircuit, FileText, Boxes } from 'lucide-react'
 import { StatChip, Section, ActionBar } from '../components/progressive'
+import { PipelineFlow } from '../components/visuals'
+
+const PIPELINE_STEPS = [
+  { icon: Video, label: 'VIDEO INPUT', sub: 'site footage', color: '#4aa8ff' },
+  { icon: ScanLine, label: 'COMPUTER VISION', sub: 'YOLO sampling', color: '#4aa8ff' },
+  { icon: ShieldAlert, label: 'SAFETY AGENT', sub: 'PPE · violations', color: '#f5a623' },
+  { icon: Activity, label: 'SITE RISK ENGINE', sub: '0-100 scoring', color: '#ff7a3c' },
+  { icon: ListChecks, label: 'COMPLIANCE AGENT', sub: 'regulatory checks', color: '#36d17e' },
+  { icon: Umbrella, label: 'INSURANCE AGENT', sub: 'exposure · claims', color: '#ff7a3c' },
+  { icon: BrainCircuit, label: 'RISK INTELLIGENCE', sub: 'unified context', color: '#b794ff' },
+  { icon: FileText, label: 'REPORT AGENT', sub: 'reports · alerts', color: '#36d17e' },
+]
 
 const LEVEL_HEX = {
   LOW: '#36d17e', MEDIUM: '#f5a623', HIGH: '#ff7a3c', CRITICAL: '#ff5a3c',
@@ -70,6 +82,17 @@ export default function Analysis() {
       </div>
 
       <div className="hazard-bar h-1.5 w-48 opacity-70"></div>
+
+      {/* ── Analysis pipeline flowchart ── */}
+      <div className="tech-panel p-4">
+        <div className="bracket-label mb-3 flex items-center gap-1.5">
+          <Boxes size={12} className="text-info" /> CONTEXT-AWARE ANALYSIS PIPELINE · ONE VIDEO → ONE REPORT
+        </div>
+        <PipelineFlow steps={PIPELINE_STEPS} />
+        <div className="readout text-[9px] text-slate-600 mt-3 border-t border-steel pt-2">
+          EVERY CELL WRITES TO THE SAME ANALYSIS RECORD — SAFETY · RISK · COMPLIANCE · INSURANCE FINDINGS STAY TRACEABLE TO ONE analysis_id.
+        </div>
+      </div>
 
       {!latest && (
         <div className="tech-panel p-6 text-center readout text-slate-500">
