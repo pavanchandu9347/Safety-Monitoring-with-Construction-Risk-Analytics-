@@ -44,7 +44,7 @@ export default function Video() {
       const res = await api.analyzeVideo(siteId, opts)
       setResult(res.data)
     } catch (e) {
-      setError(e.response?.data?.detail || 'Analysis failed. Check the backend is on port 8001 and a video source exists.')
+      setError(e.response?.data?.detail || 'Analysis failed. Check that the backend is reachable and a video source exists.')
     } finally { setProcessing(false) }
   }
 

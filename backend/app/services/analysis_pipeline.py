@@ -21,6 +21,7 @@ from __future__ import annotations
 import os
 import re
 import tempfile
+import threading
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -205,8 +206,15 @@ def run_analysis(
     file_bytes: Optional[bytes] = None,
     filename: str = "",
     conf: Optional[float] = None,
+    analysis_id: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """Run the full video pipeline for one input video and persist the results."""
+    """Run the full video pipeline for one input video and persist the results.
+
+    When ``analysis_id`` points at an existing (queued) ``VideoAnalysis`` the
+    record is reused — the response-status lifecycle stays
+    ``queued → processing → completed|failed`` across background execution.
+    Otherwise a fresh record is created (fully synchronous callers).
+    """
     site = db.query(Site).filter(Site.id == site_id).first()
     if not site:
         return {"status": "failed", "error": f"Site not found: {site_id}"}
@@ -215,17 +223,32 @@ def run_analysis(
     if not path:
         return {"status": "failed", "error": source_type}
 
-    analysis = VideoAnalysis(
-        site_id=site_id,
-        original_filename=Path(path).name,
-        stored_path=path,
-        source_type=source_type,
-        status="processing",
-        frame_interval=int(os.environ.get("FRAME_SAMPLE_RATE", 15)),
-        max_frames=int(os.environ.get("MAX_FRAMES", 30)),
-    )
-    db.add(analysis)
-    db.flush()
+    analysis = None
+    if analysis_id:
+        analysis = (
+            db.query(VideoAnalysis)
+            .filter(VideoAnalysis.id == analysis_id, VideoAnalysis.site_id == site_id)
+            .first()
+        )
+    if analysis is None:
+        analysis = VideoAnalysis(
+            site_id=site_id,
+            original_filename=Path(path).name,
+            stored_path=path,
+            source_type=source_type,
+            status="processing",
+            frame_interval=int(os.environ.get("FRAME_SAMPLE_RATE", 15)),
+            max_frames=int(os.environ.get("MAX_FRAMES", 30)),
+        )
+        db.add(analysis)
+        db.flush()
+    else:
+        # Reusing a queued record: keep its identity, reset output fields so a
+        # re-run never leaves stale results behind.
+        analysis.stored_path = path
+        analysis.source_type = source_type
+        analysis.status = "processing"
+        analysis.error = ""
     analysis_id = analysis.id
 
     try:
@@ -814,6 +837,77 @@ def run_analysis(
             analysis.error = str(exc)
             db.commit()
         return {"status": "failed", "analysis_id": analysis_id, "error": str(exc)}
+
+
+# Heavy video analyses are serialised per-process: the shared YOLO/PPE model
+# instances must never be invoked concurrently from background tasks.
+_ANALYSIS_LOCK = threading.Lock()
+
+
+def queue_analysis(
+    db: Session,
+    site_id: str,
+    filename: str = "",
+    stored_path: str = "",
+    source_type: str = "stored",
+) -> VideoAnalysis:
+    """Persist a QUEUED analysis record and return it.
+
+    The HTTP request commits this row and returns the ``analysis_id``
+    immediately; the actual pipeline runs later in the background. Central
+    ``analysis_id`` semantics are unchanged — every downstream record still
+    references this row.
+    """
+    analysis = VideoAnalysis(
+        site_id=site_id,
+        original_filename=Path(filename or "upload.mp4").name,
+        stored_path=stored_path or "",
+        source_type=source_type,
+        status="queued",
+        frame_interval=int(os.environ.get("FRAME_SAMPLE_RATE", 15)),
+        max_frames=int(os.environ.get("MAX_FRAMES", 30)),
+    )
+    db.add(analysis)
+    db.commit()
+    db.refresh(analysis)
+    return analysis
+
+
+def process_analysis_background(
+    analysis_id: str,
+    site_id: str,
+    video_path: str = "",
+    conf: Optional[float] = None,
+) -> None:
+    """Execute a queued analysis outside the request lifecycle.
+
+    Opens a dedicated session (the request session is closed once the response
+    is sent) and reuses the existing pipeline. Serialised by a process-wide
+    lock. Any unexpected error is recorded on the analysis row as ``failed``.
+    """
+    from app.database.database import SessionLocal
+
+    with _ANALYSIS_LOCK:
+        db = SessionLocal()
+        try:
+            run_analysis(
+                db,
+                site_id=site_id,
+                video_path=video_path,
+                conf=conf,
+                analysis_id=analysis_id,
+            )
+        except Exception as exc:  # noqa: BLE001 - keep status column truthful
+            db.rollback()
+            analysis = (
+                db.query(VideoAnalysis).filter(VideoAnalysis.id == analysis_id).first()
+            )
+            if analysis is not None:
+                analysis.status = "failed"
+                analysis.error = str(exc)
+                db.commit()
+        finally:
+            db.close()
 
 
 def _safety_summary(result: Dict[str, Any]) -> Dict[str, Any]:

@@ -4,6 +4,7 @@ import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from datetime import datetime, timezone
 
@@ -77,26 +78,46 @@ def get_dashboard(site_id: str, db: Session = Depends(get_db)):
         Recommendation.site_id == site_id, Recommendation.status == "pending"
     ).count()
 
+    # Per-zone rollups in three aggregate queries (was N+1: one query per zone
+    # per metric). Cheap SELECTs executed against the same filters as before.
+    zone_ids = [z.id for z in zones]
+    zone_hazard_counts: dict = {}
+    zone_active_counts: dict = {}
+    zone_event_counts: dict = {}
+    if zone_ids:
+        for zone_id, n in (
+            db.query(Hazard.zone_id, func.count())
+            .filter(Hazard.zone_id.in_(zone_ids))
+            .group_by(Hazard.zone_id)
+            .all()
+        ):
+            zone_hazard_counts[zone_id] = n
+        for zone_id, n in (
+            db.query(Hazard.zone_id, func.count())
+            .filter(Hazard.zone_id.in_(zone_ids), Hazard.status != "resolved")
+            .group_by(Hazard.zone_id)
+            .all()
+        ):
+            zone_active_counts[zone_id] = n
+        for zone_id, n in (
+            db.query(MonitoringEvent.zone_id, func.count())
+            .filter(MonitoringEvent.zone_id.in_(zone_ids))
+            .group_by(MonitoringEvent.zone_id)
+            .all()
+        ):
+            zone_event_counts[zone_id] = n
+
     zone_summaries = []
     for zone in zones:
-        zone_hazard_count = db.query(Hazard).filter(
-            Hazard.zone_id == zone.id
-        ).count()
-        zone_active_hazards = db.query(Hazard).filter(
-            Hazard.zone_id == zone.id, Hazard.status != "resolved"
-        ).count()
-        zone_event_count = db.query(MonitoringEvent).filter(
-            MonitoringEvent.zone_id == zone.id
-        ).count()
         zone_summaries.append(ZoneRiskSummary(
             zone_id=zone.id,
             zone_name=zone.name,
             zone_type=zone.zone_type,
             risk_score=zone.current_risk_score,
             risk_level=zone.risk_level,
-            hazard_count=zone_hazard_count,
-            active_hazard_count=zone_active_hazards,
-            event_count=zone_event_count,
+            hazard_count=zone_hazard_counts.get(zone.id, 0),
+            active_hazard_count=zone_active_counts.get(zone.id, 0),
+            event_count=zone_event_counts.get(zone.id, 0),
         ))
 
     trend = [

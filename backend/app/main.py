@@ -85,4 +85,27 @@ def shutdown():
 
 @app.get("/api/health")
 def health_check():
-    return {"status": "ok", "milestone": 4}
+    """Readiness probe: app is up and the configured database is reachable.
+
+    Cheap single ``SELECT 1`` per probe — suitable as a Docker healthcheck.
+    """
+    try:
+        from sqlalchemy import text
+        from app.database.database import engine as _engine
+
+        with _engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+        db_status = "ok"
+    except Exception:  # noqa: BLE001 - health probe must never 500
+        db_status = "unavailable"
+
+    if db_status != "ok":
+        from fastapi import Response
+
+        return Response(
+            status_code=503,
+            content='{"status":"degraded","db":"unavailable"}',
+            media_type="application/json",
+        )
+
+    return {"status": "ok", "milestone": 4, "db": db_status}

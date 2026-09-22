@@ -22,12 +22,35 @@ from app.services.intelligence import (  # noqa: E402
     AnalysisNotFoundError,
     SiteNotFoundError,
 )
+from app.services.historical_analytics import build_history  # noqa: E402
 from app.models.models import (  # noqa: E402
     Hazard, SafetyViolation, SafetyAlert, Worker, Equipment, InsuranceIncident,
     ClaimRecord,
 )
 
 SITE_ID = "site_riverside_main"
+
+
+def _intel(analysis_id):
+    """Read-only helper that ALWAYS closes the session.
+
+    PostgreSQL rolls back only on close; an abandoned session leaves an open
+    ``idle in transaction`` connection holding locks that block later DDL
+    (e.g. the next test module's ``drop_all``).
+    """
+    db = SessionLocal()
+    try:
+        return build_intelligence(db, SITE_ID, analysis_id)
+    finally:
+        db.close()
+
+
+def _hist():
+    db = SessionLocal()
+    try:
+        return build_history(db, SITE_ID)
+    finally:
+        db.close()
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -67,6 +90,19 @@ def enriched(analysis_id):
             hazard_type="poor_housekeeping", description="clutter",
             severity="MEDIUM", status="resolved", risk_contribution=10.0,
         ))
+        db.add(Worker(
+            id="m4_w1", site_id=SITE_ID, analysis_id=aid,
+            name="Worker One", role="scaffolder", ppe_status="non_compliant",
+            missing_ppe=["helmet"], is_present=1,
+        ))
+        db.add(Worker(
+            id="m4_w2", site_id=SITE_ID, analysis_id=aid,
+            name="Worker Two", role="operator", ppe_status="compliant",
+            missing_ppe=[], is_present=1,
+        ))
+        # Persist referenced parents before any child that links to them --
+        # PostgreSQL enforces foreign keys (SQLite never did).
+        db.flush()
         db.add(SafetyViolation(
             id="m4_v_crit", site_id=SITE_ID, analysis_id=aid,
             violation_type="no_helmet", description="worker without helmet",
@@ -82,16 +118,6 @@ def enriched(analysis_id):
             id="m4_a_high", site_id=SITE_ID, analysis_id=aid,
             alert_type="hardhat_missing", message="hardhat missing",
             severity="HIGH",
-        ))
-        db.add(Worker(
-            id="m4_w1", site_id=SITE_ID, analysis_id=aid,
-            name="Worker One", role="scaffolder", ppe_status="non_compliant",
-            missing_ppe=["helmet"], is_present=1,
-        ))
-        db.add(Worker(
-            id="m4_w2", site_id=SITE_ID, analysis_id=aid,
-            name="Worker Two", role="operator", ppe_status="compliant",
-            missing_ppe=[], is_present=1,
         ))
         db.add(Equipment(
             id="m4_e1", site_id=SITE_ID, analysis_id=aid, name="Excavator",
@@ -110,14 +136,14 @@ def enriched(analysis_id):
 
 
 def test_enriched_analysis_shared_id(enriched):
-    ctx = build_intelligence(SessionLocal(), SITE_ID, enriched)
+    ctx = _intel(analysis_id= enriched)
     assert ctx["analysis_id"] == enriched
     assert ctx["site_id"] == SITE_ID
     assert ctx["status"] in ("COMPLETE", "PARTIAL")
 
 
 def test_findings_grouped_by_severity(enriched):
-    ctx = build_intelligence(SessionLocal(), SITE_ID, enriched)
+    ctx = _intel(analysis_id= enriched)
     critical = ctx["critical_findings"]
     high = ctx["high_findings"]
 
@@ -137,14 +163,14 @@ def test_findings_grouped_by_severity(enriched):
 
 
 def test_open_violations_only_open_status(enriched):
-    ctx = build_intelligence(SessionLocal(), SITE_ID, enriched)
+    ctx = _intel(analysis_id= enriched)
     open_ids = {v["id"] for v in ctx["open_violations"]}
     assert "m4_v_crit" in open_ids
     assert "m4_v_low" in open_ids
 
 
 def test_recommendations_come_from_persisted_rows(enriched):
-    ctx = build_intelligence(SessionLocal(), SITE_ID, enriched)
+    ctx = _intel(analysis_id= enriched)
     sources = {r["source"] for r in ctx["recommendations"]}
     # The persisted per-violation mitigation is surfaced as a safety action.
     assert "safety_intelligence" in sources
@@ -157,7 +183,7 @@ def test_recommendations_come_from_persisted_rows(enriched):
 
 
 def test_worker_and_equipment_summaries_are_real(enriched):
-    ctx = build_intelligence(SessionLocal(), SITE_ID, enriched)
+    ctx = _intel(analysis_id= enriched)
     ws = ctx["worker_summary"]
     assert {"worker_id": "m4_w1", "worker_name": "Worker One"} in [
         {"worker_id": e["worker_id"], "worker_name": e["worker_name"]}
@@ -172,7 +198,7 @@ def test_worker_and_equipment_summaries_are_real(enriched):
 
 
 def test_no_fabricated_claims(enriched):
-    ctx = build_intelligence(SessionLocal(), SITE_ID, enriched)
+    ctx = _intel(analysis_id= enriched)
     db = SessionLocal()
     try:
         persisted_claims = db.query(ClaimRecord).filter(
@@ -186,7 +212,7 @@ def test_no_fabricated_claims(enriched):
 
 def test_not_verified_not_non_compliant(analysis_id):
     """NOT_VERIFIED findings must never be counted as NON_COMPLIANT."""
-    ctx = build_intelligence(SessionLocal(), SITE_ID, analysis_id)
+    ctx = _intel(analysis_id= analysis_id)
     compliance = ctx["compliance_summary"]
     assert compliance is not None
     assert int(compliance["not_verified_count"]) >= 0
@@ -198,7 +224,7 @@ def test_not_verified_not_non_compliant(analysis_id):
 
 
 def test_overall_risk_reuses_persisted_assessment(analysis_id):
-    ctx = build_intelligence(SessionLocal(), SITE_ID, analysis_id)
+    ctx = _intel(analysis_id= analysis_id)
     db = SessionLocal()
     try:
         from app.models.models import RiskAssessment
@@ -235,7 +261,7 @@ def test_unknown_site_raises(analysis_id):
 
 def test_engine_never_invents_missing_safety(enriched):
     """Safety summary fields must come straight from the persisted row."""
-    ctx = build_intelligence(SessionLocal(), SITE_ID, enriched)
+    ctx = _intel(analysis_id= enriched)
     db = SessionLocal()
     try:
         from app.models.models import SafetyAssessment
@@ -254,7 +280,7 @@ def test_engine_never_invents_missing_safety(enriched):
 
 def test_historical_analytics_insufficient_with_one_analysis(analysis_id):
     from app.services.historical_analytics import build_history
-    hist = build_history(SessionLocal(), SITE_ID)
+    hist = _hist()
     assert hist["count"] >= 1
     assert hist["trend_available"] == (hist["count"] >= 2)
     if hist["count"] < 2:
@@ -268,7 +294,7 @@ def test_historical_analytics_insufficient_with_one_analysis(analysis_id):
 def test_historical_analytics_trend_after_two_runs(enriched):
     """Two REAL analyses produce an available trend with a direction."""
     from app.services.historical_analytics import build_history
-    hist = build_history(SessionLocal(), SITE_ID)
+    hist = _hist()
     assert hist["count"] >= 2
     assert hist["trend_available"] is True
     assert hist["status"] == "AVAILABLE"

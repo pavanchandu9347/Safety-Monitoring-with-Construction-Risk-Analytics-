@@ -44,3 +44,4 @@ backend/data/
 /*.mkv
 /*.mov
 /*.avi
+scripts/_dbg_*

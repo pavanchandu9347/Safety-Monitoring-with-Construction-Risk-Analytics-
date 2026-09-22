@@ -8,7 +8,7 @@ from app.models.models import (
     Project, Site, Zone, Manager,
 )
 from app.auth.security import hash_password, verify_password
-from app.config import DEFAULT_MANAGER_EMAIL, DEFAULT_MANAGER_PASSWORD
+from app.config import DEFAULT_MANAGER_EMAIL, DEFAULT_MANAGER_PASSWORD, DEMO_MODE
 import logging
 import os
 import secrets
@@ -76,6 +76,8 @@ def seed_demo_data():
         db.add_all(zones)
 
         seed_manager(db)
+        if not DEMO_MODE:
+            logger.info("DEMO_MODE=false — demo manager account seeding skipped")
         db.commit()
     except Exception as e:
         db.rollback()
@@ -85,7 +87,11 @@ def seed_demo_data():
 
 
 def seed_manager(db):
-    """Upsert the demo manager account so the configured login always works.
+    """Upsert the demo manager account, but ONLY in demo mode.
+
+    ``DEMO_MODE=false`` disables automatic credential seeding completely: no
+    default account is ever created or reconciled, so a production deployment
+    never silently depends on built-in demo credentials.
 
     Credentials come from the environment (``DEFAULT_MANAGER_EMAIL`` /
     ``DEFAULT_MANAGER_PASSWORD``). If a manager already exists for the default
@@ -97,6 +103,9 @@ def seed_manager(db):
     and logged ONCE at startup for a brand-new account; an existing account is
     never overwritten in that case.
     """
+    if not DEMO_MODE:
+        return
+
     email = DEFAULT_MANAGER_EMAIL.lower()
     existing = (
         db.query(Manager)

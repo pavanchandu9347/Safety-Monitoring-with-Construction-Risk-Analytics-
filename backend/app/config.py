@@ -48,14 +48,56 @@ def _env_float(name: str, default: float) -> float:
         return default
 
 
+# ── Web server / port configuration ──────────────────────────────────────────
+# Single source of truth for the backend HTTP port. The Dockerfile, docker
+# compose and Vite dev proxy all reference this same default (8000).
+PORT: int = _env_int("PORT", 8000)
+HOST: str = os.environ.get("HOST", "0.0.0.0").strip()
+
+# ── File upload policy ───────────────────────────────────────────────────────
+# Maximum accepted video upload size. Uploads are streamed to disk (never fully
+# loaded into RAM) and rejected with HTTP 413 above this limit.
+MAX_UPLOAD_SIZE_MB: int = _env_int("MAX_UPLOAD_SIZE_MB", 500)
+MAX_UPLOAD_SIZE_BYTES: int = MAX_UPLOAD_SIZE_MB * 1024 * 1024
+
+# ── Demo mode ─────────────────────────────────────────────────────────────────
+# When true (default, local demo/college use) the demo manager account
+# (DEFAULT_MANAGER_EMAIL / DEFAULT_MANAGER_PASSWORD) is seeded on startup so the
+# known login works out of the box. Set DEMO_MODE=false in production: no
+# automatic account is created and credentials must be provisioned by an
+# operator (never in code, and never committed).
+DEMO_MODE: bool = os.environ.get("DEMO_MODE", "true").strip().lower() not in {
+    "0", "false", "no", "off", "disabled",
+}
+
+
 # ── Authentication & session security ─────────────────────────────────────────
-# In production JWT_SECRET_KEY MUST be set in the environment. A per-process
-# random secret is only used so the platform boots without one; every restart
-# then invalidates previously issued tokens (safe default, not a persistent
-# secret). Tests override this variable explicitly.
-JWT_SECRET_KEY: str = os.environ.get("JWT_SECRET_KEY", "") or os.urandom(32).hex()
+# JWT_SECRET_KEY MUST be set in any non-local (production) deployment. A
+# per-process random secret is ONLY used in development so the platform boots
+# without configuration; in production a missing secret fails fast at import
+# (startup) instead of silently minting a new one and invalidating every token
+# issued by earlier processes. Tests override this variable explicitly.
+JWT_SECRET_KEY: str = os.environ.get("JWT_SECRET_KEY", "").strip()
+if not JWT_SECRET_KEY and APP_ENV == "production":
+    raise RuntimeError(
+        "JWT_SECRET_KEY is required when APP_ENV=production. Generate a strong "
+        "secret, e.g. `python -c \"import secrets; print(secrets.token_urlsafe(48))\"`, "
+        "and set it in the environment (never committed to the repository)."
+    )
+if not JWT_SECRET_KEY:
+    # Development-only fallback. Not persistent: each process restart mints a
+    # fresh secret, which intentionally invalidates previously issued tokens.
+    JWT_SECRET_KEY = os.urandom(32).hex()
 JWT_ALGORITHM: str = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES: int = _env_int("ACCESS_TOKEN_EXPIRE_MINUTES", 480)
+
+# ── Brute-force protection (login rate limiting) ──────────────────────────────
+# Sliding window limits on FAILED sign-in attempts per client IP. Successful
+# logins clear the failure history. The limiter is in-process: with a single
+# uvicorn/gunicorn worker this is fully effective; document Redis for true
+# multi-worker deployments.
+LOGIN_MAX_ATTEMPTS: int = _env_int("LOGIN_MAX_ATTEMPTS", 5)
+LOGIN_WINDOW_SECONDS: int = _env_int("LOGIN_WINDOW_SECONDS", 900)
 
 # ── Demo manager bootstrap (placeholder credentials, never real secrets) ──────
 # The seeded manager account uses these defaults so the demo login works

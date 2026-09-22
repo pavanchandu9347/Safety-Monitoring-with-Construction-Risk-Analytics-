@@ -3,7 +3,7 @@ import os
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends
 from sqlalchemy.orm import Session
 
 from app.database.database import get_db
@@ -11,18 +11,27 @@ from app.models.models import (
     Project, Site, Zone
 )
 from app.services.analysis_pipeline import (
-    run_analysis, build_analysis_response, get_latest_analysis,
+    build_analysis_response,
+    get_latest_analysis,
+    process_analysis_background,
+    queue_analysis,
 )
 
 router = APIRouter()
 
 
 @router.post("/demo/generate")
-def generate_demo_analysis(site_id: str = "site_riverside_main", db: Session = Depends(get_db)):
+def generate_demo_analysis(
+    background_tasks: BackgroundTasks,
+    site_id: str = "site_riverside_main",
+    db: Session = Depends(get_db),
+):
     """Generate the dashboard by running the unified video pipeline.
 
     This is no longer a simulation: it analyzes the single configured
-    construction-site video and persists one coherent ``analysis_id``.
+    construction-site video and persists one coherent ``analysis_id``. The
+    request returns immediately with the QUEUED job id; the pipeline runs in
+    the background (POST /demo/generate no longer blocks the HTTP worker).
     """
     site = db.query(Site).filter(Site.id == site_id).first()
     if not site:
@@ -48,25 +57,24 @@ def generate_demo_analysis(site_id: str = "site_riverside_main", db: Session = D
             db.add(Zone(id=zid, site_id=site_id, name=zname, zone_type=ztype, status="active"))
         db.commit()
 
-    result = run_analysis(db, site_id=site_id)
-    if result.get("status") == "failed":
-        raise HTTPException(status_code=400, detail=result.get("error", "Analysis failed"))
-
+    analysis = queue_analysis(
+        db,
+        site_id=site_id,
+        filename="",
+        source_type="stored",
+    )
+    background_tasks.add_task(
+        process_analysis_background,
+        analysis.id,
+        site_id,
+        "",
+        None,
+    )
     return {
-        "status": "success",
-        "analysis_id": result["analysis_id"],
-        "risk_score": result.get("risk", {}).get("overall_score", 0),
-        "risk_level": result.get("risk", {}).get("risk_level", "LOW"),
-        "safety_score": result.get("safety", {}).get("overall_safety_score", 0),
-        "safety_level": result.get("safety", {}).get("overall_safety_level", "LOW"),
-        "hazards_count": len(result.get("hazards", [])),
-        "recommendations_count": len(result.get("recommendations", [])),
-        "worker_count": result.get("worker_count", 0),
-        "vehicle_count": result.get("vehicle_count", 0),
-        "ppe_compliance": result.get("ppe", {}).get("compliance", 0),
-        "video": result.get("video", {}),
-        "evidence_note": result.get("evidence_note", ""),
-        "timestamp": result.get("timestamp"),
+        "status": analysis.status,
+        "analysis_id": analysis.id,
+        "site_id": site_id,
+        "message": "Analysis queued. Poll GET /api/video/analysis/{analysis_id} for status.",
     }
 
 

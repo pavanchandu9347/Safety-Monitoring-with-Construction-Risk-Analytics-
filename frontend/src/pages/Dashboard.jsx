@@ -223,7 +223,7 @@ export default function Dashboard() {
       <div className="p-6">
         <div className="tech-panel p-5 border-l-signal">
           <p className="readout text-signal font-bold">⚠ SYS OFFLINE — {error}</p>
-          <p className="readout text-slate-400 text-xs mt-2">Ensure backend is running on port 8001.</p>
+          <p className="readout text-slate-400 text-xs mt-2">Ensure backend is reachable at {import.meta.env.VITE_API_URL || '/api'}.</p>
         </div>
       </div>
     )

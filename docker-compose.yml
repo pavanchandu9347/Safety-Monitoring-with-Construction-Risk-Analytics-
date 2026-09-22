@@ -1,36 +1,89 @@
-version: "3.8"
+# BuildSure — production-oriented deployment.
+#
+# Secrets are NOT stored here: JWT_SECRET_KEY and POSTGRES_PASSWORD are pulled
+# from the environment (docker will fail fast when they are missing). See
+# .env.example for the full variable list.
+#
+#   cp .env.example .env   # then edit .env with real values
+#   docker compose up --build -d
+name: buildsure-production
 
 services:
-  backend:
-    build:
-      context: ./backend
-    container_name: acrip-backend
-    ports:
-      - "8001:8001"
+  postgres:
+    image: postgres:16-alpine
+    container_name: buildsure-postgres
     environment:
-      - BACKEND_PORT=8001
+      POSTGRES_DB: ${POSTGRES_DB:-buildsure}
+      POSTGRES_USER: ${POSTGRES_USER:-buildsure}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env (openssl rand -hex 32)}
     volumes:
-      - ./backend:/app
-    working_dir: /app
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8001
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - acrip-net
+
+  backend:
+    build: ./backend
+    container_name: buildsure-backend
+    environment:
+      APP_ENV: ${APP_ENV:-production}
+      DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-buildsure}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-buildsure}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:?set JWT_SECRET_KEY in .env (openssl rand -hex 32)}
+      # DEMO_MODE=true seeds a default manager for local/college demos. Set
+      # false in real production and provision accounts yourself.
+      DEMO_MODE: ${DEMO_MODE:-true}
+      DEFAULT_MANAGER_EMAIL: ${DEFAULT_MANAGER_EMAIL:-BuildSure@gmail.com}
+      DEFAULT_MANAGER_PASSWORD: ${DEFAULT_MANAGER_PASSWORD:-123456}
+      CORS_ALLOW_ORIGINS: ${CORS_ALLOW_ORIGINS:-}
+      MAX_UPLOAD_SIZE_MB: ${MAX_UPLOAD_SIZE_MB:-500}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      PORT: "8000"
+      VIDEO_STORAGE_PATH: /app/data/videos
+    volumes:
+      - video_storage:/app/data/videos
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=4).status==200 else 1)"]
+      interval: 30s
+      timeout: 5s
+      start_period: 60s
+      retries: 5
+    restart: unless-stopped
     networks:
       - acrip-net
 
   frontend:
-    image: node:20-alpine
-    container_name: acrip-frontend
+    build:
+      context: ./frontend
+      args:
+        VITE_API_URL: ${VITE_API_URL:-/api}
+        VITE_DEMO_MODE: ${DEMO_MODE:-true}
+    container_name: buildsure-frontend
     ports:
-      - "5179:5179"
-    volumes:
-      - ./frontend:/app
-    working_dir: /app
-    command: sh -c "npm install && npm run dev -- --port 5179 --host 0.0.0.0"
+      - "${FRONTEND_PORT:-8080}:80"
     depends_on:
-      - backend
-    environment:
-      - VITE_API_BASE=/api
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/api/health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 30s
+      retries: 5
+    restart: unless-stopped
     networks:
       - acrip-net
+
+volumes:
+  postgres_data:
+  video_storage:
 
 networks:
   acrip-net:

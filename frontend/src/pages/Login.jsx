@@ -80,8 +80,11 @@ export default function Login() {
             <p className="text-sm text-slate-500 mt-1">Enter the manager credentials to continue.</p>
           </div>
 
-          {/* Demo credential quick-access (password stays masked) */}
-          <div className="border border-steel-2 bg-[#0e1218] p-3 space-y-2">
+          {/* Demo credential quick-access (password stays masked). Excluded from
+              the build when VITE_DEMO_MODE=false — production deployments should
+              not advertise built-in credentials. */}
+          {(((import.meta.env.VITE_DEMO_MODE) ?? 'true') !== 'false') && (
+            <div className="border border-steel-2 bg-[#0e1218] p-3 space-y-2">
             <div className="readout text-[9px] tracking-[0.2em] text-slate-500 flex items-center gap-1.5">
               <Lock size={11} className="text-info" /> DEMO ACCESS — CREDENTIALS ARE MASKED FOR SECURITY
             </div>
@@ -106,6 +109,7 @@ export default function Login() {
               </button>
             </div>
           </div>
+          )}
 
           {error && (
             <div className="flex items-center gap-2 border border-signal/40 bg-signal/10 text-signal text-sm px-3 py-2.5 rounded-[4px]">

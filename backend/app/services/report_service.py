@@ -85,9 +85,15 @@ def generate_report(
 
 
 def report_to_dict(db: Session, report: RiskReport) -> dict:
-    analysis = (
-        db.query(VideoAnalysis).filter(VideoAnalysis.id == report.analysis_id).first()
-    )
+    # Prefer the eagerly-loaded relationship (list endpoints use selectinload) so
+    # bulk listings avoid one extra query per report (N+1); fall back to a single
+    # lookup for records passed in without the eager load.
+    if "analysis" in report.__dict__:
+        analysis = report.analysis
+    else:
+        analysis = (
+            db.query(VideoAnalysis).filter(VideoAnalysis.id == report.analysis_id).first()
+        )
     snapshot = None
     if analysis is not None:
         snapshot = {

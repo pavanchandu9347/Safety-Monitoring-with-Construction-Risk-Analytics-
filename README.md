@@ -620,13 +620,15 @@ cd backend
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
-python -m uvicorn app.main:app --host 0.0.0.0 --port 8001
+cp .env.example .env        # then edit with real values
+python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
 
 Set a persistent **JWT secret** (32+ random bytes) in `backend/.env`
 (`JWT_SECRET_KEY`) and optionally a known demo login via
 `DEFAULT_MANAGER_EMAIL` / `DEFAULT_MANAGER_PASSWORD`. If the password is left
 empty a cryptographically random one is generated and logged once at startup.
+`APP_ENV=production` fails fast at startup when `JWT_SECRET_KEY` is missing.
 
 ### Frontend
 ```bash
@@ -635,28 +637,33 @@ npm install
 npm run dev -- --port 5179
 ```
 
-### (Optional) Docker
+### (Optional) Docker — production topology
 ```bash
-docker-compose up --build
+cp .env.example .env        # set JWT_SECRET_KEY + POSTGRES_PASSWORD
+docker compose up --build -d
 ```
+nginx serves the compiled frontend and proxies `/api` (HTTP + WebSocket) to the
+FastAPI backend (Gunicorn/Uvicorn) backed by PostgreSQL. Health probes run
+against `/api/health`. See the production-deployment section below.
 
 ## 30. Running Instructions
 
-1. Start the backend (port **8001**).
+1. Start the backend (port **8000**).
 2. Start the frontend (port **5179**).
 3. Open `http://localhost:5179` in a browser — you'll land on the **login page**.
 4. Log in with the seeded manager credentials (see `DEFAULT_MANAGER_*` above).
 5. The backend auto-seeds the demo Riverside Tower site and demo manager on
-   first run.
-6. Use the **Run Risk Analysis** / **Simulate Next Monitoring Tick** buttons to
-   generate monitoring events and risk assessments — high-severity findings
-   surface immediately in the **notification bell**.
+   first run (skipped when `DEMO_MODE=false`).
+6. Use the **Analyze Video** / **Simulate Next Monitoring Tick** buttons to run
+   the real video pipeline (queued → processing → completed) and generate risk
+   assessments — high-severity findings surface immediately in the
+   **notification bell**.
 7. Browse the Dashboard, Monitoring, Video, Hazards, and Risk Analysis pages.
-8. View API docs at `http://localhost:8001/docs`.
+8. View API docs at `http://localhost:8000/docs`.
 
-> **Note on ports:** The default backend port is **8001** (port 8000 may be
-> occupied by other processes on some machines). The frontend Vite proxy points
-> to `http://localhost:8001`.
+> **Note on ports:** The whole stack uses a single backend port, **8000** (Vite's
+> dev proxy and the nginx container both forward `/api` to `localhost:8000`).
+> The frontend dev server runs on **5179**.
 
 ## 31. Demo Instructions
 
@@ -675,10 +682,56 @@ See `data/README.md`. Recommended: **CSOD-24** construction-site dataset
 (excavators, dump trucks, workers). Place videos/images in `data/raw/`. If no
 dataset is available, the demo image in `data/demo/` and uploads are used.
 
-## 33. Current Limitations
+## 33. Production Deployment & HTTPS
+
+### Architecture
+- **Frontend** — production build (Vite) served by nginx (`frontend/Dockerfile`,
+  `frontend/nginx.conf`). The browser talks only to nginx on `/` and `/api/`.
+- **Backend** — FastAPI served by **Gunicorn + UvicornWorker** on `:8000`
+  (`backend/Dockerfile`). Runs `alembic upgrade head` before starting; the
+  DB-layer `create_all` remains as a safety net. One worker is the safe default
+  (in-process job queue + rate limiter + WebSocket fan-out stay coherent);
+  scale horizontally behind the proxy if needed.
+- **Database** — PostgreSQL 16 volume (`postgres_data`), healthchecked with
+  `pg_isready`; backend depends on it via `service_healthy`.
+
+### Environment variables (see `.env.example` at the repo root and
+`backend/.env.example`)
+- `JWT_SECRET_KEY` — required in production; persistent (tokens survive
+  restarts). `APP_ENV=production` refuses to start without it.
+- `POSTGRES_PASSWORD` / `POSTGRES_USER` / `POSTGRES_DB` — compose secrets.
+- `DEMO_MODE` — `false` disables the built-in manager account AND compiles the
+  demo-credenths quick-access card out of the login page.
+- `MAX_UPLOAD_SIZE_MB` — upload cap (HTTP 413 above it); files stream to disk.
+- `CORS_ALLOW_ORIGINS` — only needed when the API is served cross-origin.
+
+### Health checks
+- `/api/health` runs a `SELECT 1` against the database and returns
+  `{"status":"ok","milestone":4,"db":"ok"}` (`503` degraded when DB is down).
+- Every container ships a `HEALTHCHECK` that probes this endpoint through its
+  own network path (nginx → backend), so an unhealthy backend unblocks the
+  frontend wait automatically.
+
+### HTTPS / TLS readiness
+- **WebSockets** are negotiated from the configured API base: the frontend picks
+  `wss://` automatically when the page is served over `https:` (see
+  `api.js` → `liveWsUrl`), and nginx forwards the `Upgrade` header for
+  `/api/ws/`. No schema hard-coding.
+- Terminate TLS at the reverse proxy in front of nginx (recommended) — e.g.
+  Caddy, Traefik, or `docker compose` + a TLS-terminating proxy:
+  - Caddy: `https://app.example.com { reverse_proxy frontend:80 }` (auto-HTTPS).
+  - Traefik/nginx: load the Let's Encrypt cert secrets into the proxy; the
+    container's `:80` port stays plain HTTP behind it.
+  - Set `DEPLOYMENT_URL=https://app.example.com` so notification links are
+    HTTPS. `CORS_ALLOW_ORIGINS` only matters for cross-origin setups.
+- The MJPEG live-view stream and the API share the same origin via nginx, so no
+  TLS-related mixed-content warnings occur.
+
+## 34. Current Limitations
 
 - Milestones 1–4 implemented (Site Risk, Safety, Compliance, Insurance agents,
-  Manager Auth & Smart Risk Alerts). The Reporting Agent (Milestone 5) is planned.
+  Manager Auth & Smart Risk Alerts, Reporting Intelligence, PostgreSQL prod
+  storage, Docker deployment). PDF/PPTX export of reports is a future addition.
 - Real PPE YOLO inference requires the trained weights at `ai/models/ppe.pt`
   (or `PPE_MODEL_PATH`). If absent, PPE analysis reports "model unavailable"
   and does not fabricate results; base COCO detection still works.
@@ -693,7 +746,7 @@ dataset is available, the demo image in `data/demo/` and uploads are used.
 - Detection models are pre-trained YOLO; PPE model is fine-tuned on the
   Construction-PPE dataset.
 
-## 34. Future Milestones
+## 35. Future Milestones
 
 - **Milestone 5 — Reporting Agent** (PDF/PPTX report generation, compliance
   reports, analytics dashboard)

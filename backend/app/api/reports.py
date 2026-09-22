@@ -13,7 +13,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.auth.deps import get_current_manager
 from app.database.database import get_db
@@ -125,6 +125,7 @@ def list_reports(
     _get_site_or_404(db, site_id)
     reports = (
         db.query(RiskReport)
+        .options(selectinload(RiskReport.analysis))
         .filter(RiskReport.site_id == site_id)
         .order_by(RiskReport.created_at.desc())
         .limit(max(1, min(limit, 200)))
@@ -145,6 +146,7 @@ def get_latest_report(
     _get_site_or_404(db, site_id)
     report = (
         db.query(RiskReport)
+        .options(selectinload(RiskReport.analysis))
         .filter(RiskReport.site_id == site_id)
         .order_by(RiskReport.created_at.desc())
         .first()
@@ -163,6 +165,7 @@ def get_report(
     _get_site_or_404(db, site_id)
     report = (
         db.query(RiskReport)
+        .options(selectinload(RiskReport.analysis))
         .filter(RiskReport.id == report_id, RiskReport.site_id == site_id)
         .first()
     )

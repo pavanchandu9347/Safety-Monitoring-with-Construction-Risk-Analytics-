@@ -2,7 +2,7 @@ import { useState } from 'react'
 import {
   Building2, FileSearch, Activity, ShieldCheck, ShieldAlert, Umbrella,
   AlertTriangle, Lightbulb, History, Database, Info, Clock, HardHat,
-  Wrench, Diamond, ChevronDown, ChevronRight, Bell,
+  Wrench, Diamond, ChevronDown, ChevronRight, Bell, ListChecks,
 } from 'lucide-react'
 import { Gauge, Donut, Bars, TrendChart, EmptyState, ExpandCard, sevColor } from './visuals'
 

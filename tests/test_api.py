@@ -1,5 +1,6 @@
 import sys
 import os
+import time
 import pytest
 from fastapi.testclient import TestClient
 
@@ -47,11 +48,30 @@ def test_dashboard_endpoint():
     assert "site_name" in r.json()
 
 
+def _poll_analysis(analysis_id, timeout=180):
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        r = client.get(f"/api/video/analysis/{analysis_id}")
+        assert r.status_code == 200
+        body = r.json()
+        if body["status"] == "completed":
+            return body
+        if body["status"] == "failed":
+            pytest.fail(f"analysis failed: {body.get('error')}")
+        time.sleep(1)
+    pytest.fail("analysis never reached a terminal state")
+
+
 def test_demo_generate():
     r = client.post("/api/demo/generate")
     assert r.status_code == 200
-    assert "risk_score" in r.json()
-    assert "risk_level" in r.json()
+    q = r.json()
+    assert q["status"] == "queued"
+    assert q["analysis_id"]
+    result = _poll_analysis(q["analysis_id"])
+    assert result["status"] == "completed"
+    assert result["risk"]["overall_score"] is not None
+    assert result["risk"]["risk_level"]
 
 
 def test_demo_scenario():

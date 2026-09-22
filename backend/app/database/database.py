@@ -8,10 +8,24 @@ from dotenv import load_dotenv, find_dotenv
 _dir = os.path.dirname(os.path.abspath(__file__))
 _default_db = os.path.join(_dir, '..', '..', 'construction_risk.db')
 load_dotenv(find_dotenv())
-# Enterprise override: point the platform at any SQLAlchemy URL via DATABASE_URL.
+
+# Enterprise override: point the platform at any SQLAlchemy URL via DATABASE_URL,
+# e.g. postgresql+psycopg2://user:pass@host:5432/buildsure                  (prod)
+#      sqlite:///<path>/construction_risk.db                                (dev/test)
 DATABASE_URL = os.environ.get("DATABASE_URL", f"sqlite:///{_default_db}")
 
-engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
+_IS_POSTGRES = DATABASE_URL.startswith("postgresql")
+
+# SQLite requires a shared-thread connection; PostgreSQL drivers reject the
+# unknown ``check_same_thread`` kwarg, so the option is applied per-DBAPI.
+_engine_kwargs = {}
+if _IS_POSTGRES:
+    # Fail fast on stale pooled connections and avoid autocommit surprises.
+    _engine_kwargs["pool_pre_ping"] = True
+else:
+    _engine_kwargs["connect_args"] = {"check_same_thread": False}
+
+engine = create_engine(DATABASE_URL, **_engine_kwargs)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 

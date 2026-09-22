@@ -1,0 +1,10 @@
+data/
+venv/
+__pycache__/
+**/__pycache__/
+.env
+*.pyc
+.pytest_cache/
+construction_risk.db
+*.db
+alembic/versions/__pycache__/

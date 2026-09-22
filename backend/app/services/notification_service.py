@@ -31,7 +31,7 @@ from __future__ import annotations
 import logging
 import smtplib
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from email.mime.text import MIMEText
 from typing import Any, Optional
 
@@ -49,7 +49,7 @@ from app.config import (
     SMTP_USERNAME,
 )
 from app.live.hub import NOTIFICATION_HUB
-from app.models.models import Manager, Notification, Site
+from app.models.models import Manager, Notification, Site, VideoAnalysis
 
 logger = logging.getLogger(__name__)
 
@@ -87,7 +87,10 @@ class _Condition:
 
 
 def _now() -> datetime:
-    return datetime.now(timezone.utc)
+    # Naive UTC to match the model's default (``datetime.utcnow``) and every
+    # persisted value. Mixing a tz-aware cutoff into a naive timestamp column
+    # breaks cooldown comparisons under PostgreSQL (server TZ conversion).
+    return datetime.utcnow()
 
 
 def _rank(severity: str) -> int:
@@ -146,6 +149,7 @@ def evaluate_analysis(
     zones = sorted({h.get("zone_id") for h in hazards if h.get("zone_id")} | {a.get("zone_id") for a in alerts if a.get("zone_id")})
 
     base_evidence = {
+        "analysis_id": analysis_id,
         "risk_score": risk_score,
         "risk_level": risk_level,
         "overall_safety_score": safety_score,
@@ -212,6 +216,12 @@ def evaluate_analysis(
     )
     if managers:
         site = db.query(Site).filter(Site.id == site_id).first()
+        # PostgreSQL enforces the notification -> analysis foreign key. Real
+        # pipeline runs always persist the analysis first; for defensive callers
+        # who pass an id that does not exist we still keep the reference inside
+        # ``evidence`` but store a NULL link so referential integrity holds.
+        analysis_exists = db.query(VideoAnalysis.id).filter(VideoAnalysis.id == analysis_id).first() is not None
+        link_analysis_id = analysis_id if analysis_exists else None
         for manager in managers:
             decision = _decide(
                 db,
@@ -224,7 +234,7 @@ def evaluate_analysis(
             notification = Notification(
                 manager_id=manager.id,
                 site_id=site_id,
-                analysis_id=analysis_id,
+                analysis_id=link_analysis_id,
                 type=strongest.type,
                 severity=decision["severity"],
                 title=strongest.title,

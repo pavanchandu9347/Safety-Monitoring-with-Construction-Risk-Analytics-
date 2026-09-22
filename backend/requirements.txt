@@ -18,3 +18,10 @@ httpx
 # Milestone 4 — manager authentication & risk alerts
 PyJWT
 email-validator
+
+# Enterprise deployment — PostgreSQL + schema migrations
+psycopg2-binary
+alembic
+
+# Production ASGI server (gunicorn orchestrates uvicorn workers)
+gunicorn

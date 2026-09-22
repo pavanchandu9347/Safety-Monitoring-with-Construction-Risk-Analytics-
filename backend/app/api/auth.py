@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy.orm import Session
 
@@ -10,6 +10,7 @@ from app.auth.deps import get_current_manager, require_auth
 from app.auth.security import create_access_token, verify_password
 from app.database.database import get_db
 from app.models.models import Manager
+from app.services.rate_limit import clear_failures, is_blocked, record_failure
 
 router = APIRouter(prefix="/api/auth", tags=["Auth"])
 
@@ -58,9 +59,25 @@ def authenticate(db: Session, email: str, password: str) -> Manager:
     return manager
 
 
+def _client_key(request: Request) -> str:
+    """Per-IP limiter key. In-process: single worker deployments only."""
+    return request.client.host if request.client else "unknown"
+
+
 @router.post("/login", response_model=LoginResponse)
-def login(body: LoginRequest, db: Session = Depends(get_db)):
-    manager = authenticate(db, body.email, body.password)
+def login(body: LoginRequest, request: Request, db: Session = Depends(get_db)):
+    key = _client_key(request)
+    if is_blocked(key):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many failed login attempts. Please wait and try again.",
+        )
+    try:
+        manager = authenticate(db, body.email, body.password)
+    except HTTPException:
+        record_failure(key)
+        raise
+    clear_failures(key)
     token = create_access_token(
         subject=manager.id,
         token_version=manager.token_version,

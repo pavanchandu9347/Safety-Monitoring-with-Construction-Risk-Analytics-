@@ -1,7 +1,10 @@
 import axios from 'axios'
 
+// VITE_API_URL defaults to the same-origin /api path (nginx proxies it to the
+// backend). Set it to an absolute URL only when the API lives on another origin
+// (the backend's CORS_ALLOW_ORIGINS must include the app origin then).
 const API = axios.create({
-  baseURL: '/api',
+  baseURL: import.meta.env.VITE_API_URL || '/api',
 })
 
 // Attach the JWT to every request (Bearer header). Stream endpoints that
@@ -28,6 +31,43 @@ API.interceptors.response.use(
   }
 )
 
+// Analyses run asynchronously (status: queued → processing → completed|failed).
+// Submit, then poll the analysis record until it reaches a terminal state so
+// callers keep the same await-and-use contract they had with the synchronous
+// pipeline.
+async function waitForAnalysis(analysisId, { timeoutMs = 20 * 60 * 1000, intervalMs = 2500 } = {}) {
+  const deadline = Date.now() + timeoutMs
+  let last = null
+  while (Date.now() < deadline) {
+    const { data } = await API.get(`/video/analysis/${analysisId}`)
+    last = data
+    if (data.status === 'completed') return data
+    if (data.status === 'failed') {
+      const err = new Error(data.error || 'Video analysis failed.')
+      err.response = { data: { detail: data.error || 'Video analysis failed.' } }
+      throw err
+    }
+    await new Promise((r) => setTimeout(r, intervalMs))
+  }
+  const err = new Error(last?.status ? `Analysis still ${last.status} after the timeout.` : 'Analysis timed out.')
+  err.response = { data: { detail: err.message } }
+  throw err
+}
+
+// Resolve the running API origin + WebSocket scheme from the configured base
+// (same-origin /api or an absolute VITE_API_URL). Works behind nginx and under
+// TLS (wss://) automatically.
+function apiOrigin() {
+  const base = import.meta.env.VITE_API_URL || '/api'
+  if (base.startsWith('/')) return window.location.origin + base
+  return base.replace(/\/$/, '')
+}
+function wsBase() {
+  const base = apiOrigin()
+  const ws = base.replace(/^http/, 'ws')
+  return ws.endsWith('/') ? ws.slice(0, -1) : ws
+}
+
 export const api = {
   getDashboard: (siteId) => API.get(`/sites/${siteId}/dashboard`),
   getSites: () => API.get('/sites'),
@@ -42,7 +82,11 @@ export const api = {
   getRecommendations: (siteId) => API.get(`/sites/${siteId}/recommendations`),
   getMonitoring: (siteId) => API.get(`/sites/${siteId}/monitoring`),
   simulateMonitoring: (siteId) => API.post(`/monitoring/simulate`, null, { params: { site_id: siteId } }),
-  generateDemo: (siteId) => API.post(`/demo/generate`, null, { params: { site_id: siteId } }),
+  generateDemo: async (siteId) => {
+    const { data } = await API.post('/demo/generate', null, { params: { site_id: siteId } })
+    if (data.status === 'queued' && data.analysis_id) return waitForAnalysis(data.analysis_id)
+    return data
+  },
   processImage: (siteId, file) => {
     const formData = new FormData()
     formData.append('file', file)
@@ -67,18 +111,22 @@ export const api = {
 
   // ── Unified video-analysis pipeline (single primary input) ──────────
   listVideoSources: (siteId) => API.get('/video/source', { params: { site_id: siteId } }),
-  analyzeVideo: (siteId, { videoPath = '', file = null, conf = 0 } = {}) => {
+  analyzeVideo: async (siteId, { videoPath = '', file = null, conf = 0 } = {}) => {
+    let data
     if (file) {
       const formData = new FormData()
       formData.append('site_id', siteId)
       formData.append('file', file)
       if (conf > 0) formData.append('conf', String(conf))
-      return API.post('/video/analyze', formData, { timeout: 300000 })
+      ;({ data } = await API.post('/video/analyze', formData, { timeout: 600000 }))
+    } else {
+      ;({ data } = await API.post('/video/analyze', null, {
+        params: { site_id: siteId, video_path: videoPath, conf },
+        timeout: 600000,
+      }))
     }
-    return API.post('/video/analyze', null, {
-      params: { site_id: siteId, video_path: videoPath, conf },
-      timeout: 300000,
-    })
+    if (data.status === 'queued' && data.analysis_id) return waitForAnalysis(data.analysis_id)
+    return data
   },
   getVideoAnalysis: (analysisId) => API.get(`/video/analysis/${analysisId}`),
   getLatestVideoAnalysis: (siteId) => API.get(`/sites/${siteId}/video/analysis/latest`),
@@ -107,12 +155,11 @@ export const api = {
   liveVideoUrl: (siteId) => {
     const token = localStorage.getItem('buildsure_token') || ''
     const q = token ? `?token=${encodeURIComponent(token)}` : ''
-    return `/api/sites/${siteId}/live/video${q}`
+    return `${apiOrigin()}/sites/${siteId}/live/video${q}`
   },
   liveWsUrl: (siteId) => {
     const token = localStorage.getItem('buildsure_token') || ''
-    const proto = window.location.protocol === 'https:' ? 'wss' : 'ws'
-    return `${proto}://${window.location.host}/api/ws/sites/${siteId}/live?token=${encodeURIComponent(token)}`
+    return `${wsBase()}/ws/sites/${siteId}/live?token=${encodeURIComponent(token)}`
   },
 
   // ── Manager authentication (M4) ──────────────────────────────────────

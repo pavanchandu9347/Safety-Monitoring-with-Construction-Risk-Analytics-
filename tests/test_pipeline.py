@@ -7,6 +7,7 @@ fabricated/simulated analysis data is produced.
 
 import sys
 import os
+import time
 import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "backend"))
@@ -35,12 +36,31 @@ def setup_db():
     yield
 
 
-def test_video_analysis_runs_and_returns_status():
+def _post_and_wait():
+    """POST an analysis (returns ``queued``) then poll until terminal state."""
     r = client.post("/api/video/analyze")
     assert r.status_code == 200
-    body = r.json()
+    q = r.json()
+    assert q["status"] == "queued"
+    assert q["analysis_id"]
+    deadline = time.time() + 180
+    while time.time() < deadline:
+        rr = client.get(f"/api/video/analysis/{q['analysis_id']}")
+        assert rr.status_code == 200
+        body = rr.json()
+        if body["status"] == "completed":
+            return q, body
+        if body["status"] == "failed":
+            pytest.fail(f"analysis failed: {body.get('error')}")
+        time.sleep(1)
+    pytest.fail("analysis never reached a terminal state")
+
+
+def test_video_analysis_queues_then_completes():
+    q, body = _post_and_wait()
+    assert q["status"] == "queued"
+    assert q["analysis_id"] == body["analysis_id"]
     assert body["status"] == "completed"
-    assert body["analysis_id"]
     assert "video" in body
     assert "risk" in body
     assert "safety" in body
@@ -94,9 +114,7 @@ def test_video_source_has_exactly_one_primary_input():
 
 
 def test_get_analysis_payload_consistent():
-    r = client.post("/api/video/analyze")
-    body = r.json()
-    assert body["status"] == "completed"
+    _, body = _post_and_wait()
     aid = body["analysis_id"]
 
     r2 = client.get(f"/api/video/analysis/{aid}")
