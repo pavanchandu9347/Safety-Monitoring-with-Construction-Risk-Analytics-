@@ -18,6 +18,7 @@ The platform's ONE construction-site video is the single source of truth:
 
 from __future__ import annotations
 
+import logging
 import os
 import re
 import tempfile
@@ -817,7 +818,6 @@ def run_analysis(
                 ],
             )
         except Exception:  # noqa: BLE001
-            import logging
             logging.getLogger(__name__).exception(
                 "notification evaluation failed for analysis %s", analysis_id
             )
@@ -830,6 +830,9 @@ def run_analysis(
             "risk": _risk_summary(rd),
         })
     except Exception as exc:  # noqa: BLE001
+        logging.getLogger(__name__).exception(
+            "Video analysis failed for analysis %s (site %s)", analysis_id, site_id
+        )
         db.rollback()
         analysis = db.query(VideoAnalysis).filter(VideoAnalysis.id == analysis_id).first()
         if analysis is not None:

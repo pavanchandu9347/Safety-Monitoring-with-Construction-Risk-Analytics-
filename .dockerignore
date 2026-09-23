@@ -1,0 +1,29 @@
+# BuildSure — Docker build-context ignore rules for the backend image.
+# The backend image is built from the repository root because the FastAPI app
+# imports the top-level `ai` package (YOLO/PPE/monitoring logic).
+
+# VCS and local tooling
+.git
+**/.git
+.DS_Store
+*.md
+
+# Secrets (never baked into images)
+.env
+.env.example
+
+# Backend local data / virtualenv (keeps the context small and reproducible)
+backend/venv/
+backend/data/
+backend/construction_risk.db
+**/*.db
+**/__pycache__/
+**/*.pyc
+**/.pytest_cache/
+backend/pgdata/
+backend/pg.log
+
+# Frontend tree is packaged by its own image (frontend/Dockerfile, context ./frontend)
+frontend/
+tests/
+scripts/

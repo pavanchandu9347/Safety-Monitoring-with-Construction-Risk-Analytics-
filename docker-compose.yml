@@ -28,11 +28,20 @@ services:
       - acrip-net
 
   backend:
-    build: ./backend
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
     container_name: buildsure-backend
     environment:
       APP_ENV: ${APP_ENV:-production}
-      DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-buildsure}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-buildsure}
+      # libpq-style connection vars; the app URL-encodes the password when it
+      # assembles the SQLAlchemy DSN (safe for passwords containing @ : / etc.).
+      # Set DATABASE_URL explicitly only if you prefer a literal DSN.
+      PGHOST: postgres
+      PGPORT: "5432"
+      PGUSER: ${POSTGRES_USER:-buildsure}
+      PGPASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env (openssl rand -hex 32)}
+      PGDATABASE: ${POSTGRES_DB:-buildsure}
       JWT_SECRET_KEY: ${JWT_SECRET_KEY:?set JWT_SECRET_KEY in .env (openssl rand -hex 32)}
       # DEMO_MODE=true seeds a default manager for local/college demos. Set
       # false in real production and provision accounts yourself.
@@ -44,8 +53,13 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       PORT: "8000"
       VIDEO_STORAGE_PATH: /app/data/videos
+      # Explicit primary input for REAL YOLO analysis in the container. The
+      # demo footage is mounted read-only from the repo root (see volumes) —
+      # it is deliberately NOT baked into the image to keep it slim.
+      VIDEO_SOURCE: /app/data/primary/Contruction_vid.mp4
     volumes:
       - video_storage:/app/data/videos
+      - ./Contruction_vid.mp4:/app/data/primary/Contruction_vid.mp4:ro
     depends_on:
       postgres:
         condition: service_healthy

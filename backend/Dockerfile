@@ -2,14 +2,23 @@ FROM python:3.12-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
+    PYTHONPATH=/app \
     PORT=8000
 
-WORKDIR /app
+# The image is built from the repository root because the app imports the
+# top-level `ai` package (computer vision / PPE models) as well as `backend/app`.
+WORKDIR /app/backend
 
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+COPY backend/requirements.txt .
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends libgl1 libglib2.0-0 \
+ && rm -rf /var/lib/apt/lists/* \
+ && pip install --no-cache-dir -r requirements.txt \
+ && pip uninstall -y opencv-python \
+ && pip install --no-cache-dir --force-reinstall opencv-python-headless
 
-COPY . .
+COPY backend/ .
+COPY ai/ /app/ai
 
 EXPOSE 8000
 

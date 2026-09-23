@@ -4,6 +4,7 @@ from sqlalchemy.orm import sessionmaker, DeclarativeBase
 import os
 
 from dotenv import load_dotenv, find_dotenv
+from urllib.parse import quote_plus
 
 _dir = os.path.dirname(os.path.abspath(__file__))
 _default_db = os.path.join(_dir, '..', '..', 'construction_risk.db')
@@ -12,7 +13,18 @@ load_dotenv(find_dotenv())
 # Enterprise override: point the platform at any SQLAlchemy URL via DATABASE_URL,
 # e.g. postgresql+psycopg2://user:pass@host:5432/buildsure                  (prod)
 #      sqlite:///<path>/construction_risk.db                                (dev/test)
-DATABASE_URL = os.environ.get("DATABASE_URL", f"sqlite:///{_default_db}")
+# Container operators may instead pass libpq-style vars (PGHOST/PGPORT/PGUSER/
+# PGPASSWORD/PGDATABASE); the DSN is assembled here with the password
+# URL-encoded so special characters (e.g. '@') never corrupt the connection
+# string.
+DATABASE_URL = os.environ.get("DATABASE_URL") or (
+    f"postgresql+psycopg2://{os.environ.get('PGUSER', 'buildsure')}:"
+    f"{quote_plus(os.environ.get('PGPASSWORD', ''))}@"
+    f"{os.environ.get('PGHOST', 'localhost')}:{os.environ.get('PGPORT', '5432')}/"
+    f"{os.environ.get('PGDATABASE', 'buildsure')}"
+    if os.environ.get("PGHOST")
+    else f"sqlite:///{_default_db}"
+)
 
 _IS_POSTGRES = DATABASE_URL.startswith("postgresql")
 

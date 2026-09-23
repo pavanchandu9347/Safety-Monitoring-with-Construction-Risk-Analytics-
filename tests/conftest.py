@@ -16,12 +16,29 @@ os.environ.setdefault("JWT_SECRET_KEY", "unit-test-secret-key-at-least-32-bytes-
 os.environ.setdefault("DEFAULT_MANAGER_PASSWORD", "test-pw")
 os.environ.setdefault("DEFAULT_MANAGER_EMAIL", "manager@buildsure.io")
 
+import pytest  # noqa: E402
+
 from sqlalchemy.orm import Session  # noqa: E402
 
 from app.main import app  # noqa: E402
-from app.database.database import SessionLocal, get_db  # noqa: E402
+from app.database.database import SessionLocal, get_db, engine  # noqa: E402
 from app.auth.deps import get_current_manager  # noqa: E402
 from app.models.models import Manager  # noqa: E402
+
+
+@pytest.fixture(scope="module", autouse=True)
+def _dispose_db_connections():
+    """Close every pooled connection before each test module.
+
+    Test modules drop and recreate the whole schema at module scope. Under
+    PostgreSQL a pooled connection left mid-transaction by an earlier module
+    holds table locks that stall the next module's ``drop_all`` (silent
+    deadlock). Disposing the pool rolls those transactions back on the server
+    and keeps the suite deterministic across modules.
+    """
+    engine.dispose()
+    yield
+    engine.dispose()
 
 
 def _test_manager() -> Manager:  # type: ignore[override]

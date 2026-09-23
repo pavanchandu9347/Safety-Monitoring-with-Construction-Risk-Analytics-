@@ -34,7 +34,9 @@ config = context.config
 # If the operator has not exported DATABASE_URL, fall back to the platform
 # default (local SQLite) so `alembic upgrade head` works out of the box.
 DATABASE_URL = os.environ.get("DATABASE_URL") or APP_DEFAULT_URL
-config.set_main_option("sqlalchemy.url", DATABASE_URL)
+# ConfigParser treats '%' as interpolation syntax; escape the literal
+# percent signs coming from URL-encoded passwords so the DSN is accepted.
+config.set_main_option("sqlalchemy.url", DATABASE_URL.replace("%", "%%"))
 
 target_metadata = _models.Base.metadata
 

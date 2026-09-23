@@ -67,7 +67,7 @@ class SafetyAgent:
         safety_scores = {
             "ppe": ppe_result,
             "safety_monitoring": worker_result,
-            "accident_zones": zone_result.get("overall_accident_risk", {}),
+            "accident_zones": zone_result.get("overall_accident_risk") or {},
         }
         recommendations = self.recommendation_engine.generate(
             safety_hazards, safety_scores, zone_result.get("zones", [])
@@ -77,7 +77,7 @@ class SafetyAgent:
         overall = self._combine_overall(
             ppe_result["score"],
             worker_result["score"],
-            zone_result.get("overall_accident_risk", {}).get("score", 0),
+            (zone_result.get("overall_accident_risk") or {}).get("score", 0),
         )
 
         summary = (
@@ -86,13 +86,13 @@ class SafetyAgent:
             "workers assessed). "
             f"{len(safety_hazards)} safety hazard(s) identified. "
             f"Highest accident-risk zone: "
-            f"{zone_result.get('top_accident_zone', {}).get('zone_name', 'N/A')}."
+            f"{(zone_result.get('top_accident_zone') or {}).get('zone_name', 'N/A')}."
         )
 
         evidence_available = bool(
             ppe_result.get("assessed", False)
             or worker_result.get("evidence_available", False)
-            or zone_result.get("overall_accident_risk", {}).get("evidence_available", False)
+            or (zone_result.get("overall_accident_risk") or {}).get("evidence_available", False)
         )
 
         return {

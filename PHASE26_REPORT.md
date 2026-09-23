@@ -1,6 +1,6 @@
 # Phase 26 — Production-Hardening Verification Report
 
-Status: **COMPLETE** (with one environment constraint noted below)
+Status: **COMPLETE**
 Date: 2026-09-22
 
 ## Scope
@@ -10,10 +10,8 @@ handling, login rate limiting, N+1 query elimination, production Docker topology
 PostgreSQL), upload limits/whitelist, background video analysis with a queued API contract, demo gating,
 frontend/backend automated tests, documentation, and a production-like end-to-end acceptance run.
 
-Constraint (unchanged from previous sessions): **no `docker` binary exists on this machine**, so the Docker
-artifacts are written and diff-reviewed but could not be built/started here (`docker compose up --build` must be
-run by the team on a Docker host). Everything that can be verified without Docker was executed and is evidenced
-below.
+Note: Docker was previously unavailable on this machine; it is now installed and the production stack has been
+**built, started and acceptance-tested here** (evidence below).
 
 ## Verification Evidence
 
@@ -60,7 +58,51 @@ PASS: zero page/console errors                        (incl. WS /api/ws/sites/..
 ACCEPTANCE_OK
 ```
 
-### 6. SQLite → PostgreSQL migration re-validated on a fresh DB then dropped
+### 7. Docker production stack — built, started, acceptance-tested
+```
+$ docker compose build            # backend (python:3.12-slim + torch/ultralytics),
+                                   # frontend (node build -> nginx), postgres pulled
+$ docker compose up -d
+Container buildsure-postgres   Healthy   (postgres:16-alpine, pg_isready)
+Container buildsure-backend    Healthy   (gunicorn/uvicorn worker, alembic upgrade)  [200 /api/health db:ok]
+Container buildsure-frontend   Healthy   (nginx, wget probe via proxy)               [200 /api/health]
+Frontend published on http://localhost:8080
+```
+Browser E2E on the real stack (`http://localhost:8080`, same-origin `/api`):
+```
+PASS: login page renders brand
+PASS: demo quick-access card visible
+PASS: login + dashboard renders with real data
+PASS: executive report renders sections
+PASS: zero page/console errors          (incl. authenticated /api/ws/sites/../live handshake through nginx)
+ACCEPTANCE_OK
+```
+API / pipeline acceptance through nginx (`http://localhost:8080/api`):
+```
+POST /auth/login                    -> token
+POST /video/analyze (sample.mp4)    -> {"status":"queued", analysis_id}
+GET  /video/analysis/{id}           -> queued -> completed   (sample lacks people; zero-detect evidence path)
+POST /sites/{site}/reports/generate -> 200 EXECUTIVE RISK SUMMARY (after a completed analysis)
+WS   /api/ws/sites/{site}/live      -> {"status":"STOPPED"} snapshots (no fabricated data)
+```
+
+### 8. Bugs found and fixed while exercising the container
+- `ModuleNotFoundError: ai` — backend image was built from `./backend` but the app imports the top-level `ai`
+  package. Backend build context moved to the repo root (`COPY backend/ .` + `COPY ai/ /app/ai`, `PYTHONPATH=/app`).
+- `ImportError: libxcb.so.1` — `ultralytics` pulls the GUI `opencv-python`, colliding with `opencv-python-headless`.
+  Added `libgl1 libglib2.0-0` and force the headless build (`pip uninstall opencv-python` + reinstall).
+- Alembic `ValueError: invalid interpolation syntax` — encoded `%` in passwords blew up ConfigParser;
+  `alembic/env.py` now escapes `%` as `%%` for `set_main_option`.
+- `NameError: DEFAULT_VIDEO_SOURCE` — `live.py` referenced an unimported config constant on every WS connect;
+  imported it from `app.config` (WS now handshakes and streams STOPPED snapshots).
+- `'NoneType' object has no attribute 'get'` — `SafetyAgent` crashed when the report's `accident_zones` had
+  `top_accident_zone: None` (empty-evidence video). Guarded with `or {}` in `safety_agent/agent.py`.
+- `cannot access local variable 'logging'` — a nested `import logging` shadowed the outer logger; removed the
+  redundant inner import and added a top-level `logging` + `logging.exception` on pipeline failures.
+- `POSTGRES_PASSWORD` with special characters (`@`) would corrupt a literal DSN; compose now passes libpq-style
+  env vars and `database.py` assembles the URL-encoded DSN (URL-safe passwords).
+
+### 9. SQLite → PostgreSQL migration re-validated on a fresh DB then dropped
 ```
 Total rows copied: 352, skipped 0
 validate_migration.py: all FK pairs OK, seed anchors present, Status: OK
@@ -75,15 +117,16 @@ validate_migration.py: all FK pairs OK, seed anchors present, Status: OK
 | 9    | /api/health 503 degraded path wired into HEALTHCHECKs | Done + verified |
 | 11   | Login rate limiting (sliding window, in-process) | Done + 429 verified |
 | 13   | N+1 fixes: dashboard zone aggregates; reports selectinload(analysis) | Done |
-| 14   | Production Docker topology (backend/frontend/nginx/compose) | Written (not executed — no docker) |
+| 14   | Production Docker topology (backend/frontend/nginx/compose) | Done + built + started + acceptance-tested |
 | 15-17| Upload size cap + extension whitelist + 400/413 handling | Done + verified |
-| 19-20| DATABASE_URL re-injected from env; CORS env for compose | Done |
+| 19-20| DATABASE_URL / libpq env injected from compose; CORS env | Done |
 | 21-23| Background analysis, queued API, frontend wait-for-analysis + demo gating | Done + E2E verified |
-| 26   | This report + committed changes | In progress → completed |
+| 26   | This report + committed changes | Completed |
 
 ## Deviations / Notes
 
-- Docker artifacts unexecuted (constraint above); `frontend/Dockerfile` requires `npm ci` — lockfile updated.
+- The container image does not bundle the demo construction video (`Contruction_vid.mp4`); operators provide it
+  via the UI upload or `VIDEO_SOURCE`/volume mount. Uploads and zero-evidence analyses are fully covered by tests.
 - Rate limiter resets on process restart (documented; in-process by design).
 - Absolute `VITE_API_URL` must include the `/api` suffix (documented in `.env.example` / README).
 - nginx `client_max_body_size 500m` must be raised if `MAX_UPLOAD_SIZE_MB` rises above 500.
