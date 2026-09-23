@@ -1,10 +1,12 @@
 import { useState } from 'react'
 import { Navigate } from 'react-router-dom'
-import { HardHat, Eye, EyeOff, Loader2, CircleAlert, KeyRound, Tag, Lock, UserRound, Check } from 'lucide-react'
+import { HardHat, Eye, EyeOff, Loader2, CircleAlert, KeyRound, Tag, Lock, UserRound, Check, Sun, Moon } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
+import { useTheme } from '../contexts/ThemeContext'
 
 export default function Login() {
   const { manager, loading, login } = useAuth()
+  const { theme, toggleTheme } = useTheme()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [show, setShow] = useState(false)
@@ -72,7 +74,18 @@ export default function Login() {
       </div>
 
       {/* ── Form panel ── */}
-      <div className="flex-1 flex items-center justify-center p-6">
+      <div className="flex-1 flex items-center justify-center p-6 relative">
+        <button
+          onClick={toggleTheme}
+          aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+          title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+          className="absolute top-4 right-4 flex items-center gap-2 px-3 py-2 text-slate-400 hover:text-white hover:bg-[#151a21] rounded-[4px] transition-colors"
+        >
+          {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
+          <span className="readout text-[10px] tracking-widest hidden sm:block">
+            {theme === 'dark' ? 'LIGHT MODE' : 'DARK MODE'}
+          </span>
+        </button>
         <form onSubmit={submit} className="w-full max-w-sm space-y-5">
           <div className="mb-2">
             <div className="bracket-label mb-3">AUTHORIZED MANAGER LOGIN</div>

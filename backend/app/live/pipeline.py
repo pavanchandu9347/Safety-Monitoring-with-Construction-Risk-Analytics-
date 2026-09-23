@@ -134,6 +134,9 @@ class LivePipeline:
         with self._lock:
             self.status = "STOPPED"
             self.status_detail = ""
+        # Broadcast the terminal state so WebSocket subscribers stop receiving
+        # the stale LIVE metrics snapshot and can settle on STOPPED.
+        self._broadcast(self._build_status_snapshot())
         logger.info("Live analysis stopped for site %s", self.site_id)
         return {"status": "STOPPED", "detail": "stopped"}
 

@@ -2,7 +2,6 @@ import { Routes, Route, Navigate } from 'react-router-dom'
 import Layout from './layouts/Layout'
 import Dashboard from './pages/Dashboard'
 import Monitoring from './pages/Monitoring'
-import Video from './pages/Video'
 import Hazards from './pages/Hazards'
 import Analysis from './pages/Analysis'
 import Safety from './pages/Safety'
@@ -12,6 +11,7 @@ import Intelligence from './pages/Intelligence'
 import Reports from './pages/Reports'
 import Login from './pages/Login'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
+import { ThemeProvider } from './contexts/ThemeContext'
 import { Loader2 } from 'lucide-react'
 
 function ProtectedLayout() {
@@ -29,13 +29,13 @@ function ProtectedLayout() {
 
 function App() {
   return (
-    <AuthProvider>
-      <Routes>
+    <ThemeProvider>
+      <AuthProvider>
+        <Routes>
         <Route path="/login" element={<Login />} />
         <Route element={<ProtectedLayout />}>
           <Route path="/" element={<Dashboard />} />
           <Route path="/monitoring" element={<Monitoring />} />
-          <Route path="/video" element={<Video />} />
           <Route path="/hazards" element={<Hazards />} />
           <Route path="/analysis" element={<Analysis />} />
           <Route path="/safety" element={<Safety />} />
@@ -45,8 +45,9 @@ function App() {
           <Route path="/reports" element={<Reports />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-    </AuthProvider>
+        </Routes>
+      </AuthProvider>
+    </ThemeProvider>
   )
 }
 

@@ -31,7 +31,7 @@ from pydantic import BaseModel
 
 from app.live import pipeline as pipeline_mod
 from app.live.hub import NOTIFICATION_HUB
-from app.config import default_video_source
+from app.config import default_video_source, DEFAULT_VIDEO_SOURCE
 from app.database.database import SessionLocal
 from app.auth.deps import ws_get_manager, authorize_site, require_site_access
 
@@ -118,6 +118,14 @@ async def ws_live(websocket: WebSocket, site_id: str):
             except queue.Empty:
                 pass
             # Fall through and re-send latest so the client knows the state.
+            # When the pipeline reached a terminal state, push one final status
+            # snapshot then close so the client settles and stops reconnecting.
+            if not pipe.is_running and pipe.status in ("STOPPED", "STREAM_ENDED", "ERROR"):
+                try:
+                    await websocket.send_json({"status": pipe.status, "detail": pipe.status_detail})
+                except Exception:  # noqa: BLE001
+                    pass
+                break
             snapshot = pipe.latest_snapshot or {"status": pipe.status}
             try:
                 await websocket.send_json(snapshot)

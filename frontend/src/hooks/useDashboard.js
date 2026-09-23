@@ -32,10 +32,13 @@ export function useDashboard(refreshMs = 10000) {
   const wsRef = useRef(null)
   const backoffRef = useRef(1000)
   const aliveRef = useRef(true)
+  const statusRef = useRef('STOPPED')
+  const [liveBusy, setLiveBusy] = useState(false)
 
   const applySnapshot = (snap) => {
     if (!snap || typeof snap !== 'object') return
     const isMetrics = snap.type === 'metrics' || snap.status
+    if (snap.status) statusRef.current = snap.status
 
     setLive((prev) => ({
       ...prev,
@@ -96,6 +99,9 @@ export function useDashboard(refreshMs = 10000) {
     }
     ws.onclose = () => {
       if (!aliveRef.current) return
+      // A deliberate stop (or a terminal stream state) closes the feed from
+      // the backend on purpose; never reconnect-loop against it.
+      if (['STOPPED', 'STREAM_ENDED', 'ERROR'].includes(statusRef.current)) return
       setLive((p) => ({ ...p, status: 'RECONNECTING' }))
       const delay = backoffRef.current
       backoffRef.current = Math.min(backoffRef.current * 1.5, 10000)
@@ -152,21 +158,33 @@ export function useDashboard(refreshMs = 10000) {
   }, [siteId])
 
   const startLive = async () => {
-    setLive((p) => ({ ...p, status: 'STARTING' }))
+    setLiveBusy(true)
+    setLive((p) => ({ ...p, status: 'STARTING', detail: '' }))
     try {
       const res = await api.startLive(siteId)
+      statusRef.current = res.data?.status || 'STARTING'
       setLive((p) => ({ ...p, status: res.data?.status || p.status, detail: res.data?.detail || '' }))
+      // If the previous stop closed the socket, (re)open the live feed now.
+      if (!wsRef.current || wsRef.current.readyState > 1) connect()
     } catch (e) {
+      statusRef.current = 'ERROR'
       setLive((p) => ({ ...p, status: 'ERROR', detail: e.response?.data?.detail || e.message }))
+    } finally {
+      setLiveBusy(false)
     }
   }
 
   const stopLive = async () => {
+    setLiveBusy(true)
     try {
       const res = await api.stopLive(siteId)
+      statusRef.current = res.data?.status || 'STOPPED'
       setLive((p) => ({ ...p, status: res.data?.status || 'STOPPED', detail: res.data?.detail || '' }))
     } catch (e) {
+      statusRef.current = 'ERROR'
       setLive((p) => ({ ...p, status: 'ERROR', detail: e.response?.data?.detail || e.message }))
+    } finally {
+      setLiveBusy(false)
     }
   }
 
@@ -177,6 +195,7 @@ export function useDashboard(refreshMs = 10000) {
     reload: () => load(),
     live,
     liveTrend,
+    liveBusy,
     startLive,
     stopLive,
   }

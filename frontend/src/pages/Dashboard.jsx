@@ -1,13 +1,13 @@
 import { useDashboard } from '../hooks/useDashboard'
 import { formatTime } from '../utils/risk'
-import { useState, useRef, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api } from '../services/api'
 import { useSite } from '../hooks/useDashboard'
 import {
   TrendingUp, TrendingDown, Minus, ShieldAlert, Droplets, Wrench, MapPin,
   Activity, Crosshair, Gauge, Radio, RefreshCw, Wrench as WrenchIcon, Sparkles, ListChecks,
-  Video, Play, Square, RadioTower, Upload, Loader2, Clapperboard, CircleAlert, ArrowUpRight,
+  Video, Play, Square, RadioTower, Clapperboard, Loader2, CircleAlert, ArrowUpRight,
   FileText,
 } from 'lucide-react'
 import { StatChip, Section, ActionBar } from '../components/progressive'
@@ -76,7 +76,7 @@ function MiniGauge({ label, value, sub, color }) {
     <div className="bg-[#0a0e13] border border-steel p-3 flex flex-col items-center justify-center">
       <ScoreGauge value={value} color={color || '#4aa8ff'} label={sub} size={72} />
       <div className="readout text-[8px] tracking-[0.2em] text-slate-500 mt-1.5">{label}</div>
-      {sub && <div className="readout text-[8px] font-bold tracking-widest mt-0.5" style={{ color: color || '#e2e8f0' }}>{sub}</div>}
+      {sub && <div className="readout text-[8px] font-bold tracking-widest mt-0.5" style={{ color: color || 'var(--color-ink)' }}>{sub}</div>}
     </div>
   )
 }
@@ -150,7 +150,7 @@ function ZoneTile({ zone, selected, onSelect }) {
 
 export default function Dashboard() {
   const siteId = useSite()
-  const { data, error, reload, live, liveTrend, startLive, stopLive } = useDashboard(8000)
+  const { data, error, reload, live, liveTrend, liveBusy, startLive, stopLive } = useDashboard(8000)
   const [selectedZone, setSelectedZone] = useState(null)
   const [generating, setGenerating] = useState(false)
   const [detail, setDetail] = useState(null)
@@ -159,7 +159,6 @@ export default function Dashboard() {
   const [sources, setSources] = useState(null)
   const [videoBusy, setVideoBusy] = useState(false)
   const [videoErr, setVideoErr] = useState(null)
-  const videoFileRef = useRef(null)
   const navigate = useNavigate()
   const [activeAlert, setActiveAlert] = useState(null)
   const [ov, setOv] = useState(null)
@@ -208,10 +207,10 @@ export default function Dashboard() {
   }
   useEffect(() => { loadVideoMeta() }, [siteId])
 
-  const analyzeVideo = async (file = null) => {
+  const analyzeVideo = async () => {
     setVideoBusy(true); setVideoErr(null)
     try {
-      await api.analyzeVideo(siteId, { file })
+      await api.analyzeVideo(siteId, {})
       await Promise.all([reload(), loadVideoMeta()])
     } catch (e) {
       setVideoErr(e.response?.data?.detail || e.message || 'Video analysis failed')
@@ -253,12 +252,6 @@ export default function Dashboard() {
           <div className="readout text-[10px] text-slate-500 tracking-widest mt-0.5">CONSTRUCTION RISK OPERATIONS CENTER · ONE VIDEO · ONE ANALYSIS</div>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={() => videoFileRef.current?.click()} disabled={videoBusy}
-            className="flex items-center gap-2 bg-steel hover:bg-steel-2 disabled:opacity-50 text-white border border-steel-2 hover:border-steel-3 readout text-[11px] font-bold tracking-wider px-3 py-2 transition">
-            <Upload size={13} /> LOAD VIDEO
-          </button>
-          <input ref={videoFileRef} type="file" accept="video/*,.mp4,.mov,.avi,.mkv,.webm" className="hidden"
-            onChange={(e) => { const f = e.target.files?.[0]; if (f) analyzeVideo(f); e.target.value = '' }} />
           <button onClick={() => analyzeVideo()} disabled={videoBusy}
             className="flex items-center gap-2 bg-hazard hover:bg-hazard-2 text-black readout text-[11px] font-bold tracking-wider px-3 py-2 transition disabled:opacity-60">
             {videoBusy ? <><Loader2 className="animate-spin" size={13} /> SAMPLING › YOLO › AGENTS</> : <><RefreshCw size={13} /> ANALYZE SITE VIDEO</>}
@@ -362,13 +355,14 @@ export default function Dashboard() {
               className="flex items-center gap-2 bg-steel hover:bg-steel-2 text-white border border-steel-2 hover:border-steel-3 disabled:opacity-40 disabled:text-slate-400 readout text-[10px] font-bold tracking-wider px-3 py-2 transition">
               <Video size={12} /> {showVideo ? 'HIDE VIDEO' : 'VIEW VIDEO'}
             </button>
-            <button onClick={isLiveRunning ? stopLive : startLive}
-              className={`flex items-center gap-2 readout text-[10px] font-bold tracking-wider px-3 py-2 transition ${
+            <button onClick={isLiveRunning ? stopLive : startLive} disabled={liveBusy}
+              className={`flex items-center gap-2 readout text-[10px] font-bold tracking-wider px-3 py-2 transition disabled:opacity-50 disabled:cursor-not-allowed ${
                 isLiveRunning
                   ? 'bg-signal hover:bg-[#ff463c] text-black'
                   : 'bg-info hover:bg-[#3a8ee6] text-black'
               }`}>
-              {isLiveRunning ? <><Square size={12} /> STOP LIVE</> : <><Play size={12} /> START LIVE</>}
+              {liveBusy ? <><Loader2 className="animate-spin" size={12} /> {isLiveRunning ? 'STOPPING…' : 'STARTING…'}</>
+                : isLiveRunning ? <><Square size={12} /> STOP LIVE</> : <><Play size={12} /> START LIVE</>}
             </button>
           </div>
         </div>

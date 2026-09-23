@@ -18,6 +18,7 @@
   --color-signal: #ff5a3c;       /* alarm red */
   --color-signal-ok: #36d17e;    /* go-green */
   --color-signal-info: #4aa8ff;  /* status blue */
+  --color-ink: #d7dde6;          /* default text on panels */
 
   --font-mono-tech: "ui-monospace", "SFMono-Regular", "Menlo", "Consolas", monospace;
 }
@@ -127,3 +128,88 @@ body {
 ::-webkit-scrollbar-track { background: #0b0f14; }
 ::-webkit-scrollbar-thumb { background: #2a3542; border-radius: 0; border: 2px solid #0b0f14; }
 ::-webkit-scrollbar-thumb:hover { background: #3a4757; }
+
+/* ── Light theme ───────────────────────────────────────────────────
+   Applied via data-theme="light" on <html> (see ThemeContext). Tailwind
+   v4 emits utilities as var(--color-*), so flipping every @theme token
+   re-colours every panel/steel/hazard/signal utility at once. The
+   remaining hard-coded utilities (arbitrary hex + named slates + white)
+   are remapped below with matching-equality attribute selectors, which
+   are plain rules and therefore beat the utilities layer. Accent colours
+   (amber/red/green/blue) are intentionally kept identical in both themes. */
+[data-theme="light"] {
+  --color-panel: #ffffff;
+  --color-panel-2: #f3f7fb;
+  --color-panel-3: #e6edf6;
+  --color-steel: #d3deea;
+  --color-steel-2: #adbfd1;
+  --color-inkslab: #fbf7ec;
+  /* Accent colors darkened for text legibility on light surfaces */
+  --color-hazard: #b45309;
+  --color-hazard-2: #c2680c;
+  --color-signal: #c81e2b;
+  --color-signal-ok: #15803d;
+  --color-signal-info: #0b5ec3;
+  --color-ink: #16202e;
+}
+
+[data-theme="light"] body {
+  background-color: #eef2f8;
+  color: #1d2836;
+}
+
+[data-theme="light"] .blueprint-bg {
+  background-color: #eef2f8;
+  background-image:
+    linear-gradient(rgba(74, 168, 255, 0.10) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(74, 168, 255, 0.10) 1px, transparent 1px),
+    linear-gradient(rgba(74, 168, 255, 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(74, 168, 255, 0.06) 1px, transparent 1px);
+  background-size: 80px 80px, 80px 80px, 16px 16px, 16px 16px;
+}
+
+[data-theme="light"] .tech-panel {
+  background: linear-gradient(180deg, #ffffff 0%, #eef2f8 100%);
+  border-color: #cbd8e6;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.65);
+}
+
+[data-theme="light"] .bracket-label { color: #5f7186; }
+
+[data-theme="light"] ::-webkit-scrollbar-track { background: #e2e9f2; }
+[data-theme="light"] ::-webkit-scrollbar-thumb { background: #b7c7d8; border-color: #e2e9f2; }
+[data-theme="light"] ::-webkit-scrollbar-thumb:hover { background: #9cb3c9; }
+
+/* Hard-coded backgrounds */
+[data-theme="light"] [class~="bg-[#080b0f]"] { background-color: #f7fafd; }
+[data-theme="light"] [class~="bg-[#0a0e13]"] { background-color: #ffffff; }
+[data-theme="light"] [class~="bg-[#0b0f14]"] { background-color: #eef2f8; }
+[data-theme="light"] [class~="bg-[#0d1117]"] { background-color: #eaf0f7; }
+[data-theme="light"] [class~="bg-[#0e1218]"] { background-color: #e4ebf4; }
+[data-theme="light"] [class~="bg-[#0e1319]"] { background-color: #e9eff6; }
+[data-theme="light"] [class~="bg-[#11161d]"] { background-color: #f5f8fc; }
+[data-theme="light"] [class~="bg-[#151a21]"] { background-color: #ffffff; }
+[data-theme="light"] [class~="bg-[#151b23]"] { background-color: #ffffff; }
+[data-theme="light"] [class~="bg-[#1a1f27]"] { background-color: #ffffff; }
+[data-theme="light"] [class~="bg-[#1b2431]"] { background-color: #dbe6f2; }
+[data-theme="light"] [class~="bg-[#3a8ee6]"] { background-color: #3a8ee6; }
+[data-theme="light"] [class~="hover:bg-[#0e1319]"] { background-color: #e9eff6; }
+[data-theme="light"] [class~="hover:bg-[#151a21]"] { background-color: #f1f5fa; }
+[data-theme="light"] [class~="hover:bg-[#151b23]"] { background-color: #f1f5fa; }
+[data-theme="light"] [class~="hover:bg-[#1b2431]"] { background-color: #d7e3f0; }
+[data-theme="light"] [class~="hover:bg-[#3a8ee6]"] { background-color: #3a8ee6; }
+[data-theme="light"] [class~="hover:bg-[#ff463c]"] { background-color: #ff463c; }
+
+/* Hard-coded text */
+[data-theme="light"] [class~="text-white"] { color: #16202e; }
+[data-theme="light"] [class~="hover:text-white"] { color: #16202e; }
+[data-theme="light"] [class~="text-slate-100"] { color: #1e293b; }
+[data-theme="light"] [class~="text-slate-200"] { color: #334155; }
+[data-theme="light"] [class~="text-slate-300"] { color: #475569; }
+[data-theme="light"] [class~="text-slate-400"] { color: #5f7186; }
+[data-theme="light"] [class~="text-slate-500"] { color: #5f7186; }
+[data-theme="light"] [class~="text-slate-600"] { color: #64748b; }
+[data-theme="light"] [class~="text-[#94a3b8]"] { color: #64748b; }
+
+/* Hard-coded borders */
+[data-theme="light"] [class~="border-[#475569]"] { border-color: #c7d3e0; }

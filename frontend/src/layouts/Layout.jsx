@@ -1,13 +1,14 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { Outlet, NavLink, useLocation, useNavigate } from 'react-router-dom'
 import {
-  LayoutDashboard, ShieldAlert, Activity, Camera, Radio, HardHat,
+  LayoutDashboard, ShieldAlert, Activity, Radio, HardHat,
   Crosshair, ShieldCheck, Bell, LogOut, BrainCircuit, FileText,
-  CheckCheck, User as UserIcon
+  CheckCheck, User as UserIcon, Sun, Moon
 } from 'lucide-react'
 import { api } from '../services/api'
 import { useSite } from '../hooks/useDashboard'
 import { useAuth } from '../contexts/AuthContext'
+import { useTheme } from '../contexts/ThemeContext'
 
 const RISK_LEVELS = {
   LOW: { label: 'LOW', color: '#36d17e' },
@@ -26,7 +27,6 @@ const SEVERITY_COLORS = {
 const NAV = [
   { to: '/', label: 'OPS. DASHBOARD', icon: LayoutDashboard, code: '01' },
   { to: '/monitoring', label: 'SENSOR FEED', icon: Radio, code: '02' },
-  { to: '/video', label: 'CV / DATASET', icon: Camera, code: '03' },
   { to: '/hazards', label: 'HAZARD LOG', icon: ShieldAlert, code: '04' },
   { to: '/analysis', label: 'RISK ANALYSIS', icon: Activity, code: '05' },
   { to: '/safety', label: 'SAFETY CTL', icon: HardHat, code: '06' },
@@ -55,6 +55,7 @@ function timeAgo(iso) {
 export default function Layout() {
   const siteId = useSite()
   const { manager, logout } = useAuth()
+  const { theme, toggleTheme } = useTheme()
   const navigate = useNavigate()
   const [risk, setRisk] = useState(null)
   const location = useLocation()
@@ -173,6 +174,19 @@ export default function Layout() {
         </div>
 
         <div className="flex items-center gap-1 pr-1">
+
+          {/* ── Theme toggle ── */}
+          <button
+            onClick={toggleTheme}
+            aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+            title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+            className="flex items-center gap-2 px-3 py-2 text-slate-400 hover:text-white hover:bg-[#151a21] transition-colors"
+          >
+            {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
+            <span className="hidden xl:block readout text-[10px] tracking-widest">
+              {theme === 'dark' ? 'LIGHT' : 'DARK'}
+            </span>
+          </button>
 
           {/* ── Notification bell ── */}
           <div className="relative" ref={bellRef}>

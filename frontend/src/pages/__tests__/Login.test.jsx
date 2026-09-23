@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { BrowserRouter } from 'react-router-dom'
 import Login from '../Login.jsx'
 import { AuthProvider } from '../../contexts/AuthContext'
+import { ThemeProvider } from '../../contexts/ThemeContext'
 
 vi.mock('../../services/api', () => ({
   api: {
@@ -19,9 +20,11 @@ const { api } = await import('../../services/api')
 const renderLogin = () =>
   render(
     <BrowserRouter>
-      <AuthProvider>
-        <Login />
-      </AuthProvider>
+      <ThemeProvider>
+        <AuthProvider>
+          <Login />
+        </AuthProvider>
+      </ThemeProvider>
     </BrowserRouter>
   )
 
