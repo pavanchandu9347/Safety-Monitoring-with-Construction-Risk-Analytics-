@@ -29,7 +29,7 @@ function K({ k, v, accent }) {
   return (
     <div className="flex items-center justify-between gap-3 readout text-[10px] text-slate-400 border-b border-steel-2/40 py-1.5 last:border-0">
       <span className="tracking-widest">{k}</span>
-      <span className="font-bold tabular-nums text-right" style={{ color: accent || '#e2e8f0' }}>{v}</span>
+      <span className="font-bold tabular-nums text-right" style={{ color: accent || 'var(--color-ink)' }}>{v}</span>
     </div>
   )
 }
@@ -39,7 +39,7 @@ function Chip({ icon: Icon, label, value, accent }) {
     <div className="flex items-center gap-2 bg-[#0a0e13] border border-steel px-2.5 py-1.5">
       <Icon size={12} style={{ color: accent || '#4aa8ff' }} />
       <span className="readout text-[8px] tracking-widest text-slate-500">{label}</span>
-      <span className="readout text-[11px] font-bold tabular-nums" style={{ color: accent || '#e2e8f0' }}>{value}</span>
+      <span className="readout text-[11px] font-bold tabular-nums" style={{ color: accent || 'var(--color-ink)' }}>{value}</span>
     </div>
   )
 }

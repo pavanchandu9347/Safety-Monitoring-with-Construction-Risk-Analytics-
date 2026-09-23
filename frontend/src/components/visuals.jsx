@@ -108,7 +108,7 @@ export function Bars({ items, max: forcedMax }) {
             <div className="h-full transition-all"
               style={{ width: `${clamp((Number(it.value) || 0) / max * 100)}%`, background: it.color || '#4aa8ff' }} />
           </div>
-          <span className="readout text-[11px] font-bold tabular-nums w-9 text-right" style={{ color: it.color || '#e2e8f0' }}>
+          <span className="readout text-[11px] font-bold tabular-nums w-9 text-right" style={{ color: it.color || 'var(--color-ink)' }}>
             {Number(it.value) || 0}
           </span>
         </div>

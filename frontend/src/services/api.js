@@ -189,6 +189,8 @@ export const api = {
   getLatestReport: (siteId) => API.get(`/sites/${siteId}/reports/latest`),
   getReport: (siteId, reportId) => API.get(`/sites/${siteId}/reports/${reportId}`),
   getReportText: (siteId, reportId) => API.get(`/sites/${siteId}/reports/${reportId}/text`),
+  getReportPdf: (siteId, reportId) =>
+    API.get(`/sites/${siteId}/reports/${reportId}/pdf`, { responseType: 'blob' }),
 }
 
 export default API

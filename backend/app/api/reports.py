@@ -12,6 +12,7 @@ import logging
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import Response
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session, selectinload
 
@@ -28,6 +29,7 @@ from app.services.intelligence import (
 )
 from app.services.report_service import (
     generate_report,
+    render_pdf,
     render_text,
     report_to_dict,
 )
@@ -189,6 +191,33 @@ def get_report_text(
     if report is None:
         raise HTTPException(status_code=404, detail="Report not found")
     return {"report_id": report.id, "text": render_text(db, report)}
+
+
+@router.get("/sites/{site_id}/reports/{report_id}/pdf")
+def get_report_pdf(
+    site_id: str,
+    report_id: str,
+    db: Session = Depends(get_db),
+) -> Response:
+    """Export one report as a downloadable A4 PDF (evidence-only content)."""
+    _get_site_or_404(db, site_id)
+    report = (
+        db.query(RiskReport)
+        .filter(RiskReport.id == report_id, RiskReport.site_id == site_id)
+        .first()
+    )
+    if report is None:
+        raise HTTPException(status_code=404, detail="Report not found")
+    pdf_bytes = render_pdf(db, report)
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="buildsure-report-{report.id[:12]}.pdf"'
+            )
+        },
+    )
 
 
 @router.get("/sites/{site_id}/intelligence")

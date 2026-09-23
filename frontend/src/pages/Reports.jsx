@@ -54,19 +54,18 @@ export default function Reports() {
   const download = async (report) => {
     setDownloading(true)
     try {
-      const r = await api.getReportText(siteId, report.id)
-      const blob = new Blob([r.data.text], { type: 'text/plain;charset=utf-8' })
-      const url = URL.createObjectURL(blob)
+      const r = await api.getReportPdf(siteId, report.id)
+      const url = URL.createObjectURL(r.data)
       const a = document.createElement('a')
       a.href = url
-      a.download = `buildsure-report-${report.id.slice(0, 12)}.txt`
+      a.download = `buildsure-report-${report.id.slice(0, 12)}.pdf`
       document.body.appendChild(a)
       a.click()
       a.remove()
       URL.revokeObjectURL(url)
-      setMsg({ type: 'ok', text: 'REPORT TEXT DOWNLOADED (.TXT).' })
+      setMsg({ type: 'ok', text: 'REPORT DOWNLOADED AS PDF.' })
     } catch {
-      setMsg({ type: 'err', text: 'DOWNLOAD FAILED — FULL TEXT UNAVAILABLE.' })
+      setMsg({ type: 'err', text: 'PDF DOWNLOAD FAILED — CHECK THE BACKEND CONNECTION.' })
     } finally { setDownloading(false) }
   }
 
@@ -171,7 +170,7 @@ export default function Reports() {
               </button>
               <button onClick={() => download(selected)} disabled={downloading}
                 className="flex items-center gap-1.5 readout text-[10px] font-bold tracking-wider border border-info text-info hover:bg-info hover:text-black px-2.5 py-1.5 transition disabled:opacity-40">
-                <Download size={12} /> {downloading ? 'DOWNLOADING...' : 'DOWNLOAD .TXT'}
+                <Download size={12} /> {downloading ? 'DOWNLOADING...' : 'DOWNLOAD PDF'}
               </button>
             </div>
           </div>

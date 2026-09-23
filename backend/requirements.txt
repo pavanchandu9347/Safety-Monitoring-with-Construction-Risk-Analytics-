@@ -25,3 +25,6 @@ alembic
 
 # Production ASGI server (gunicorn orchestrates uvicorn workers)
 gunicorn
+
+# PDF export for executive reports (pure-python renderer, no native deps)
+fpdf2
