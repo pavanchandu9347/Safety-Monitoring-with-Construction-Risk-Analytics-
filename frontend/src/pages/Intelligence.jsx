@@ -4,7 +4,7 @@ import { useSite } from '../hooks/useDashboard'
 import { formatTime } from '../utils/risk'
 import { ReportSections } from '../components/ReportSections'
 import {
-  BrainCircuit, FileText, AlertTriangle, ShieldAlert, ShieldCheck,
+  BrainCircuit, FileText, FileCheck2, AlertTriangle, ShieldAlert, ShieldCheck,
   Activity, Loader2, RefreshCw, Database, ListChecks,
   ChevronDown, ChevronRight, Lightbulb, Download,
 } from 'lucide-react'

@@ -231,6 +231,16 @@ def evaluate_analysis(
             )
             if decision is None:
                 continue
+            # Row-level conditions (hazard/violation/incident) don't carry their
+            # own score, so the notification falls back to the analysis' real
+            # overall risk score — the same value stored in ``evidence``. This
+            # keeps the dashboard's "RISK SCORE" always populated with genuine
+            # persisted evidence, never a fabricated figure.
+            effective_risk_score = (
+                strongest.risk_score
+                if strongest.risk_score is not None
+                else risk_score
+            )
             notification = Notification(
                 manager_id=manager.id,
                 site_id=site_id,
@@ -240,7 +250,7 @@ def evaluate_analysis(
                 title=strongest.title,
                 message=strongest.message,
                 source="analysis_pipeline",
-                risk_score=strongest.risk_score,
+                risk_score=effective_risk_score,
                 evidence=strongest.evidence or base_evidence,
                 dedup_key=decision["dedup_key"],
             )
