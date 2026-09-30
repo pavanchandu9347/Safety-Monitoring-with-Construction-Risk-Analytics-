@@ -1,13 +1,13 @@
 import { useState } from 'react'
 import { Navigate } from 'react-router-dom'
-import { HardHat, Eye, EyeOff, Loader2, CircleAlert, KeyRound, Tag, Lock, UserRound, Check, Sun, Moon } from 'lucide-react'
+import { HardHat, Eye, EyeOff, Loader2, CircleAlert, Tag, KeyRound, Sun, Moon } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { useTheme } from '../contexts/ThemeContext'
 
 export default function Login() {
   const { manager, loading, login } = useAuth()
   const { theme, toggleTheme } = useTheme()
-  const [email, setEmail] = useState('')
+  const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [show, setShow] = useState(false)
   const [submitting, setSubmitting] = useState(false)
@@ -18,11 +18,11 @@ export default function Login() {
     setSubmitting(true)
     setError('')
     try {
-      await login(email, password)
+      await login(username, password)
     } catch (err) {
       const status = err?.response?.status
       if (status === 401) {
-        setError('Invalid email or password. Contact your site administrator.')
+        setError('Invalid username or password. Contact your site administrator.')
       } else {
         setError(err?.response?.data?.detail || err.message || 'Unable to sign in. Please try again.')
       }
@@ -93,37 +93,6 @@ export default function Login() {
             <p className="text-sm text-slate-500 mt-1">Enter the manager credentials to continue.</p>
           </div>
 
-          {/* Demo credential quick-access (password stays masked). Excluded from
-              the build when VITE_DEMO_MODE=false — production deployments should
-              not advertise built-in credentials. */}
-          {(((import.meta.env.VITE_DEMO_MODE) ?? 'true') !== 'false') && (
-            <div className="border border-steel-2 bg-[#0e1218] p-3 space-y-2">
-            <div className="readout text-[9px] tracking-[0.2em] text-slate-500 flex items-center gap-1.5">
-              <Lock size={11} className="text-info" /> DEMO ACCESS — CREDENTIALS ARE MASKED FOR SECURITY
-            </div>
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2 min-w-0">
-                <UserRound size={12} className="text-slate-500 shrink-0" />
-                <span className="readout text-[11px] text-slate-200 truncate">BuildSure@gmail.com</span>
-              </div>
-              <button type="button" onClick={() => { setEmail('BuildSure@gmail.com'); setError('') }}
-                className="readout text-[9px] tracking-widest text-info hover:text-white flex items-center gap-1 shrink-0">
-                <Check size={11} /> FILL EMAIL
-              </button>
-            </div>
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2 min-w-0">
-                <KeyRound size={12} className="text-slate-500 shrink-0" />
-                <span className="readout text-[11px] text-slate-200">{'123456'.replace(/./g, '•')}</span>
-              </div>
-              <button type="button" onClick={() => { setPassword('123456'); setShow(false); setError('') }}
-                className="readout text-[9px] tracking-widest text-info hover:text-white flex items-center gap-1 shrink-0">
-                <Check size={11} /> FILL PASSWORD
-              </button>
-            </div>
-          </div>
-          )}
-
           {error && (
             <div className="flex items-center gap-2 border border-signal/40 bg-signal/10 text-signal text-sm px-3 py-2.5 rounded-[4px]">
               <CircleAlert size={15} className="shrink-0" />
@@ -132,16 +101,17 @@ export default function Login() {
           )}
 
           <div className="space-y-2">
-            <label className="readout text-[10px] tracking-widest text-slate-500">EMAIL</label>
+            <label className="readout text-[10px] tracking-widest text-slate-500">USERNAME</label>
             <div className="relative">
               <Tag className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={14} />
               <input
-                type="email"
+                type="text"
+                autoComplete="username"
                 required
                 autoFocus
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="BuildSure@gmail.com"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                placeholder="pavanchandu"
                 className="w-full bg-panel border border-steel rounded-[4px] pl-9 pr-3 py-2.5 text-sm text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-hazard"
               />
             </div>
@@ -153,6 +123,7 @@ export default function Login() {
               <KeyRound className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={14} />
               <input
                 type={show ? 'text' : 'password'}
+                autoComplete="current-password"
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}

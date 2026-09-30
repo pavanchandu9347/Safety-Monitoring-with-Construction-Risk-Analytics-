@@ -18,6 +18,7 @@ from app.database.database import Base, engine, init_db, SessionLocal  # noqa: E
 from app.auth.deps import get_current_manager  # noqa: E402
 from app.models.models import Manager  # noqa: E402
 
+DEMO_USERNAME = "testmanager"
 DEMO_EMAIL = "manager@buildsure.io"
 DEMO_PASS = "test-pw"
 
@@ -41,15 +42,16 @@ def reset_db():
     yield
 
 
-def _login(c, email=DEMO_EMAIL, password=DEMO_PASS):
-    return c.post("/api/auth/login", json={"email": email, "password": password}).json()["access_token"]
+def _login(c, username=DEMO_USERNAME, password=DEMO_PASS):
+    return c.post("/api/auth/login", json={"username": username, "password": password}).json()["access_token"]
 
 
 def test_login_success_and_me(client):
-    r = client.post("/api/auth/login", json={"email": DEMO_EMAIL, "password": DEMO_PASS})
+    r = client.post("/api/auth/login", json={"username": DEMO_USERNAME, "password": DEMO_PASS})
     assert r.status_code == 200
     body = r.json()
     assert body["token_type"] == "bearer"
+    assert body["manager"]["username"] == DEMO_USERNAME
     assert body["manager"]["email"] == DEMO_EMAIL
     token = body["access_token"]
 
@@ -62,12 +64,12 @@ def test_login_success_and_me(client):
 
 
 def test_login_rejects_wrong_password(client):
-    r = client.post("/api/auth/login", json={"email": DEMO_EMAIL, "password": "wrong-pass"})
+    r = client.post("/api/auth/login", json={"username": DEMO_USERNAME, "password": "wrong-pass"})
     assert r.status_code == 401
 
 
 def test_login_rejects_unknown_user(client):
-    r = client.post("/api/auth/login", json={"email": "nobody@buildsure.io", "password": DEMO_PASS})
+    r = client.post("/api/auth/login", json={"username": "nobody", "password": DEMO_PASS})
     assert r.status_code == 401
 
 
@@ -79,12 +81,12 @@ def test_protected_route_requires_token(client):
 def test_inactive_manager_cannot_login(client):
     db = SessionLocal()
     try:
-        m = db.query(Manager).filter(Manager.email == DEMO_EMAIL).first()
+        m = db.query(Manager).filter(Manager.username == DEMO_USERNAME).first()
         m.is_active = 0
         db.commit()
     finally:
         db.close()
-    r = client.post("/api/auth/login", json={"email": DEMO_EMAIL, "password": DEMO_PASS})
+    r = client.post("/api/auth/login", json={"username": DEMO_USERNAME, "password": DEMO_PASS})
     assert r.status_code == 401
 
 
@@ -92,7 +94,7 @@ def test_inactive_manager_token_rejected(client):
     # Re-activate, login, then deactivate -> the already-issued token must die.
     db = SessionLocal()
     try:
-        m = db.query(Manager).filter(Manager.email == DEMO_EMAIL).first()
+        m = db.query(Manager).filter(Manager.username == DEMO_USERNAME).first()
         m.is_active = 1
         db.commit()
     finally:
@@ -100,7 +102,7 @@ def test_inactive_manager_token_rejected(client):
     token = _login(client)
     db = SessionLocal()
     try:
-        m = db.query(Manager).filter(Manager.email == DEMO_EMAIL).first()
+        m = db.query(Manager).filter(Manager.username == DEMO_USERNAME).first()
         m.is_active = 0
         db.commit()
     finally:
@@ -110,7 +112,7 @@ def test_inactive_manager_token_rejected(client):
     # Restore so later tests in this module are unaffected.
     db = SessionLocal()
     try:
-        m = db.query(Manager).filter(Manager.email == DEMO_EMAIL).first()
+        m = db.query(Manager).filter(Manager.username == DEMO_USERNAME).first()
         m.is_active = 1
         db.commit()
     finally:

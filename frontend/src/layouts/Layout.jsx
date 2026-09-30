@@ -268,7 +268,7 @@ export default function Layout() {
           <div className="flex items-center gap-2 pl-3 pr-4 py-2 border-l border-steel">
             <div className="text-right leading-tight max-w-[170px]">
               <div className="text-xs font-semibold text-slate-100 truncate">{manager?.name || 'Manager'}</div>
-              <div className="text-[9px] text-slate-500 readout tracking-wider truncate">{manager?.email}</div>
+              <div className="text-[9px] text-slate-500 readout tracking-wider truncate">{manager?.username || manager?.email}</div>
             </div>
             <div className="w-8 h-8 rounded-[4px] bg-[#151a21] border border-steel flex items-center justify-center">
               <UserIcon className="text-info" size={15} />

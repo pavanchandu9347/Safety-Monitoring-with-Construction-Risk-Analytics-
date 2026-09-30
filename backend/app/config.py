@@ -60,17 +60,6 @@ HOST: str = os.environ.get("HOST", "0.0.0.0").strip()
 MAX_UPLOAD_SIZE_MB: int = _env_int("MAX_UPLOAD_SIZE_MB", 500)
 MAX_UPLOAD_SIZE_BYTES: int = MAX_UPLOAD_SIZE_MB * 1024 * 1024
 
-# ── Demo mode ─────────────────────────────────────────────────────────────────
-# When true (default, local demo/college use) the demo manager account
-# (DEFAULT_MANAGER_EMAIL / DEFAULT_MANAGER_PASSWORD) is seeded on startup so the
-# known login works out of the box. Set DEMO_MODE=false in production: no
-# automatic account is created and credentials must be provisioned by an
-# operator (never in code, and never committed).
-DEMO_MODE: bool = os.environ.get("DEMO_MODE", "true").strip().lower() not in {
-    "0", "false", "no", "off", "disabled",
-}
-
-
 # ── Authentication & session security ─────────────────────────────────────────
 # JWT_SECRET_KEY MUST be set in any non-local (production) deployment. A
 # per-process random secret is ONLY used in development so the platform boots
@@ -99,12 +88,14 @@ ACCESS_TOKEN_EXPIRE_MINUTES: int = _env_int("ACCESS_TOKEN_EXPIRE_MINUTES", 480)
 LOGIN_MAX_ATTEMPTS: int = _env_int("LOGIN_MAX_ATTEMPTS", 5)
 LOGIN_WINDOW_SECONDS: int = _env_int("LOGIN_WINDOW_SECONDS", 900)
 
-# ── Demo manager bootstrap (placeholder credentials, never real secrets) ──────
-# The seeded manager account uses these defaults so the demo login works
-# out-of-the-box: BuildSure@gmail.com / 123456. Override in backend/.env for
-# any real deployment. Tests override these variables explicitly.
-DEFAULT_MANAGER_EMAIL: str = os.environ.get("DEFAULT_MANAGER_EMAIL", "BuildSure@gmail.com").strip()
-DEFAULT_MANAGER_PASSWORD: str = os.environ.get("DEFAULT_MANAGER_PASSWORD", "123456")
+# ── Manager bootstrap (seeded once at startup) ────────────────────────────────
+# The single site manager account is created/reconciled on startup (there is no
+# demo-account gating: this IS the account that signs in). Login uses the
+# USERNAME as identifier. Override in backend/.env for any real shared
+# deployment — never commit real secrets. Tests override these variables.
+DEFAULT_MANAGER_USERNAME: str = os.environ.get("DEFAULT_MANAGER_USERNAME", "pavanchandu").strip().lower()
+DEFAULT_MANAGER_EMAIL: str = os.environ.get("DEFAULT_MANAGER_EMAIL", "pavanchandu@buildsure.io").strip()
+DEFAULT_MANAGER_PASSWORD: str = os.environ.get("DEFAULT_MANAGER_PASSWORD", "BuildSure")
 
 # ── Evidence-based risk-alert notification policy ─────────────────────────────
 # A notification is only generated when the risk/safety scores reach these

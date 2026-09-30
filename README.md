@@ -651,9 +651,10 @@ against `/api/health`. See the production-deployment section below.
 1. Start the backend (port **8000**).
 2. Start the frontend (port **5179**).
 3. Open `http://localhost:5179` in a browser — you'll land on the **login page**.
-4. Log in with the seeded manager credentials (see `DEFAULT_MANAGER_*` above).
-5. The backend auto-seeds the demo Riverside Tower site and demo manager on
-   first run (skipped when `DEMO_MODE=false`).
+4. Log in with the seeded manager credentials (see `DEFAULT_MANAGER_*` above;
+   the default identifier is the **username** `pavanchandu`).
+5. The backend auto-seeds the Riverside Tower site and the single site manager
+   (username/password/email reconciled from `DEFAULT_MANAGER_*`) on first run.
 6. Use the **Analyze Video** / **Simulate Next Monitoring Tick** buttons to run
    the real video pipeline (queued → processing → completed) and generate risk
    assessments — high-severity findings surface immediately in the
@@ -700,8 +701,9 @@ dataset is available, the demo image in `data/demo/` and uploads are used.
 - `JWT_SECRET_KEY` — required in production; persistent (tokens survive
   restarts). `APP_ENV=production` refuses to start without it.
 - `POSTGRES_PASSWORD` / `POSTGRES_USER` / `POSTGRES_DB` — compose secrets.
-- `DEMO_MODE` — `false` disables the built-in manager account AND compiles the
-  demo-credenths quick-access card out of the login page.
+- `DEFAULT_MANAGER_USERNAME` / `DEFAULT_MANAGER_PASSWORD` / `DEFAULT_MANAGER_EMAIL` —
+  the single site-manager account seeded/reconciled at startup. Login uses the
+  **username** as identifier (a legacy email address also authenticates).
 - `MAX_UPLOAD_SIZE_MB` — upload cap (HTTP 413 above it); files stream to disk.
 - `CORS_ALLOW_ORIGINS` — only needed when the API is served cross-origin.
 

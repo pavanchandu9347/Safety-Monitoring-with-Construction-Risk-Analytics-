@@ -257,7 +257,7 @@ def test_notification_api_inbox_flow(reset_db):
     assert created
     nid = created[0].id
 
-    # conftest's get_current_manager override returns the demo manager.
+    # conftest's get_current_manager override returns the seeded manager.
     r = client.get("/api/notifications")
     assert r.status_code == 200
     assert any(n["id"] == nid for n in r.json())
@@ -284,6 +284,7 @@ def test_notifications_are_scoped_to_manager(reset_db):
         other = Manager(
             id="manager_other_002",
             name="Other",
+            username="other2",
             email="other2@buildsure.io",
             password_hash="scrypt$0$0$0$0000$0000",
             role="manager",

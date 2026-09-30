@@ -81,7 +81,7 @@ def main():
     # 3) auth-critical anchor rows
     print("\nAuth anchor rows (postgres):")
     anchors = {
-        "seed manager (BuildSure@gmail.com)": "managers",
+        "seed manager (pavanchandu)": "managers",
         "seed project (proj_riverside_001)": "projects",
         "seed site (site_riverside_main)": "sites",
     }

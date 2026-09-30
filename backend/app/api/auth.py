@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, Field
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.auth.deps import get_current_manager, require_auth
@@ -16,20 +17,24 @@ router = APIRouter(prefix="/api/auth", tags=["Auth"])
 
 
 class LoginRequest(BaseModel):
-    email: EmailStr
+    username: str = Field(min_length=1, max_length=128)
     password: str = Field(min_length=1)
 
 
 class ManagerPublic(BaseModel):
     id: str
     name: str
+    username: str
     email: str
     role: str
     site_id: str | None = None
 
     @classmethod
     def from_manager(cls, m: Manager) -> "ManagerPublic":
-        return cls(id=m.id, name=m.name, email=m.email, role=m.role, site_id=m.site_id)
+        return cls(
+            id=m.id, name=m.name, username=m.username, email=m.email,
+            role=m.role, site_id=m.site_id,
+        )
 
 
 class LoginResponse(BaseModel):
@@ -41,17 +46,27 @@ class LoginResponse(BaseModel):
 def _raise_credentials() -> HTTPException:
     return HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Invalid email or password",
+        detail="Invalid username or password",
     )
 
 
-def authenticate(db: Session, email: str, password: str) -> Manager:
+def authenticate(db: Session, username: str, password: str) -> Manager:
     """Verify credentials; raise 401 for unknown/inactive/wrong password.
 
+    The login identifier is the manager's ``username`` (its former email
+    address is still accepted as a fallback so legacy accounts keep working).
     The response is identical for every failure mode so nothing leaks which
     part of the login was wrong.
     """
-    manager = db.query(Manager).filter(Manager.email == email.strip().lower()).first()
+    ident = username.strip().lower()
+    manager = (
+        db.query(Manager)
+        .filter(
+            (func.lower(Manager.username) == ident)
+            | (func.lower(Manager.email) == ident)
+        )
+        .first()
+    )
     if manager is None or not manager.is_active:
         raise _raise_credentials()
     if not verify_password(password, manager.password_hash):
@@ -73,7 +88,7 @@ def login(body: LoginRequest, request: Request, db: Session = Depends(get_db)):
             detail="Too many failed login attempts. Please wait and try again.",
         )
     try:
-        manager = authenticate(db, body.email, body.password)
+        manager = authenticate(db, body.username, body.password)
     except HTTPException:
         record_failure(key)
         raise

@@ -66,7 +66,30 @@ _MIGRATION_COLUMNS = {
     "safety_violations": ["analysis_id"],
     "safety_alerts": ["analysis_id"],
     "safety_assessments": ["analysis_id"],
+    "managers": ["username"],
 }
+
+
+def _backfill_manager_username(conn, inspector):
+    """Fill empty/usernameless manager rows from the local part of their email.
+
+    ``create_all`` cannot ALTER an existing table and ``ALTER TABLE`` cannot
+    set NOT NULL on a just-added column without a value, so existing rows are
+    backfilled here. Usernames derived from the email root stay unique per
+    manager (one email => one manager).
+    """
+    tables = set(inspector.get_table_names())
+    if "managers" not in tables:
+        return
+    cols = {c["name"] for c in inspector.get_columns("managers")}
+    if "username" not in cols:
+        return
+    if _IS_POSTGRES:
+        sql = "UPDATE managers SET username = NULLIF(lower(split_part(email, '@', 1)), '') WHERE username IS NULL OR username = ''"
+    else:
+        sql = ("UPDATE managers SET username = lower(substr(email, 1, instr(email, '@') - 1)) "
+               "WHERE username IS NULL OR username = ''")
+    conn.execute(text(sql))
 
 
 def _migrate():
@@ -80,6 +103,7 @@ def _migrate():
             for col in columns:
                 if col not in existing:
                     conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {col} VARCHAR(64)"))
+        _backfill_manager_username(conn, inspector)
 
 
 def init_db():

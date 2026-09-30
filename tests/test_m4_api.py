@@ -27,6 +27,7 @@ SITE_ID = "site_riverside_main"
 
 client = TestClient(app)
 
+DEMO_USERNAME = "testmanager"
 DEMO_EMAIL = "manager@buildsure.io"
 DEMO_PASS = "test-pw"
 
@@ -61,8 +62,8 @@ def real_client():
     app.dependency_overrides = saved
 
 
-def _login(c, email=DEMO_EMAIL, password=DEMO_PASS):
-    return c.post("/api/auth/login", json={"email": email, "password": password}).json()["access_token"]
+def _login(c, username=DEMO_USERNAME, password=DEMO_PASS):
+    return c.post("/api/auth/login", json={"username": username, "password": password}).json()["access_token"]
 
 
 def test_generate_report_api(analysis_id):

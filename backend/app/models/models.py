@@ -26,6 +26,7 @@ class Manager(Base):
 
     id = Column(String, primary_key=True, default=gen_uuid)
     name = Column(String, nullable=False)
+    username = Column(String, nullable=False, unique=True, index=True)
     email = Column(String, nullable=False, unique=True, index=True)
     password_hash = Column(String, nullable=False)
     role = Column(String, default="manager")          # manager | admin

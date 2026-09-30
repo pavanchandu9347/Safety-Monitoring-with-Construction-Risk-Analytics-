@@ -163,7 +163,7 @@ export const api = {
   },
 
   // ── Manager authentication (M4) ──────────────────────────────────────
-  login: (email, password) => API.post('/auth/login', { email, password }),
+  login: (username, password) => API.post('/auth/login', { username, password }),
   getMe: () => API.get('/auth/me'),
   logout: () => API.post('/auth/logout'),
 

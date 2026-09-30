@@ -48,8 +48,8 @@ export function AuthProvider({ children }) {
     return () => { cancelled = true }
   }, [token])
 
-  const login = useCallback(async (email, password) => {
-    const res = await api.login(email, password)
+  const login = useCallback(async (username, password) => {
+    const res = await api.login(username, password)
     const { access_token, manager: m } = res.data
     localStorage.setItem(TOKEN_KEY, access_token)
     localStorage.setItem(MANAGER_KEY, JSON.stringify(m))

@@ -13,9 +13,7 @@ COPY . .
 # /api), so the default is the same-origin path. Override only when the API is
 # served from a different origin (CORS + VITE_API_URL must match then).
 ARG VITE_API_URL=/api
-ARG VITE_DEMO_MODE=true
 ENV VITE_API_URL=$VITE_API_URL
-ENV VITE_DEMO_MODE=$VITE_DEMO_MODE
 
 RUN npm run build
 
